@@ -47,6 +47,10 @@ st.markdown("""
     .feature-card {
         background: #1e293b; border-radius: 20px; padding: 1.2rem 0.8rem;
         text-align: center; border: 1px solid #334155;
+        min-height: 160px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
     .feature-icon { font-size: 2rem; margin-bottom: 0.5rem; }
     .feature-title { font-weight: 600; color: #e2e8f0; font-size: 1rem; }
@@ -58,7 +62,7 @@ st.markdown("""
     }
     .quote-text { font-size: 1.1rem; font-style: italic; color: #cbd5e1; }
     .auditor-name {
-        color: #fbbf24; font-weight: 600; font-style: normal;
+        color: #2dd4bf; font-weight: 600; font-style: normal;
         background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
