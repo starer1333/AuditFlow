@@ -198,7 +198,6 @@ with col2:
         label_visibility="collapsed"
     )
     st.caption("支持 PDF、PNG、JPG 格式，单次上传一份文件")
-)
 
 # -------------------- API 配置 --------------------
 SILICONFLOW_API_KEY = st.secrets.get("SILICONFLOW_API_KEY", "sk-owvtekhwtwulnbuomcvsrrzglwprcyfylehowryuufxfxuau")
