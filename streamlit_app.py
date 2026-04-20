@@ -86,7 +86,7 @@ for col, (icon, title, desc) in zip(cols, features):
 st.divider()
 
 # -------------------- API 配置 --------------------
-SILICONFLOW_API_KEY = st.secrets.get("SILICONFLOW_API_KEY", "sk-your-api-key")
+SILICONFLOW_API_KEY = st.secrets.get("SILICONFLOW_API_KEY", "sk-owvtekhwtwulnbuomcvsrrzglwprcyfylehowryuufxfxuau")
 SILICONFLOW_MODEL = "Qwen/Qwen2-VL-72B-Instruct"
 
 # -------------------- 文件上传 --------------------
