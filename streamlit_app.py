@@ -102,7 +102,7 @@ with st.expander("📖 我们的故事：从凌晨三点的审计师说起", exp
     st.markdown("""
     <div class="story-box">
         <p class="quote-text">“凌晨三点，我揉了揉发酸的眼睛。面前是几百页带水印的银行对账单、开户清单、信用报告……格式五花八门，数据散落在各处。这个月底的审计报告，又是一场和时间的赛跑。我多么希望，能有一个数字化大脑帮我处理这些重复劳动，让我专注于真正重要的专业判断。”</p>
-        <p style="text-align: right; margin-top: 1rem;">—— <span class="auditor-name">一位四大审计师的自白</span> 的自白</p>
+        <p style="text-align: right; margin-top: 1rem;">—— <span class="auditor-name">一位四大审计师的自白</span> </p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -153,16 +153,51 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
-st.divider()
+with st.expander("🚀 未来展望：从单文件识别到跨文档智能审计", expanded=False):
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 20px; padding: 1.5rem; border: 1px solid #334155;">
+        <p style="color: #cbd5e1; font-size: 1rem; line-height: 1.6;">
+            当前版本已实现<span style="color: #2dd4bf;">单份源文件的智能识别与底稿生成</span>。在下一阶段的演进中，AuditFlow 将迈向更高阶的审计智能体：
+        </p>
+        <ul style="color: #94a3b8; margin-top: 1rem; line-height: 1.8;">
+            <li><span style="color: #fbbf24;">📦 批量上传</span> — 支持一次性上传同一家企业的多份、多类别源文件（对账单、开户清单、信用报告等）。</li>
+            <li><span style="color: #fbbf24;">🔗 交叉比对</span> — 自动识别各文件间的勾稽关系，将银行对账单余额与开户清单账户、信用报告授信额度进行交叉验证。</li>
+            <li><span style="color: #fbbf24;">📊 差异定位</span> — 对于比对不一致的数据，系统将精准标注差异金额，并<span style="color: #60a5fa;">反向追溯至两份源文件的原始位置</span>。</li>
+            <li><span style="color: #fbbf24;">🖼️ 可视化对证</span> — 自动生成一份<span style="color: #60a5fa;">带原始文件截图高亮的对比PDF报告</span>，清晰呈现差异细节，供审计师与企业财务高效沟通。</li>
+        </ul>
+        <p style="color: #cbd5e1; margin-top: 1rem;">
+            最终，AuditFlow 将成为审计师的<span style="color: #2dd4bf;">“全局风险雷达”</span>，不仅处理数据，更主动发现疑点、推送洞察。
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
+st.divider()
 # -------------------- 文件上传区 --------------------
 st.markdown("### 📁 上传银行源文件")
-st.markdown("*支持银行对账单、开户清单、询证函回函等扫描件或图片*")
+col1, col2 = st.columns([1, 2])
 
-uploaded_file = st.file_uploader(
-    "拖拽文件或点击浏览",
-    type=["pdf", "png", "jpg", "jpeg"],
-    label_visibility="collapsed"
+with col1:
+    file_type = st.selectbox(
+        "📋 文件类型",
+        options=[
+            "🏦 银行对账单",
+            "📋 开户清单",
+            "❌ 销户清单/销户证明",
+            "📊 企业信用报告",
+            "📬 银行询证函（回函）",
+            "⚖️ 银行存款余额调节表"
+        ],
+        index=0,
+        help="选择正确的文件类型，系统将自动匹配对应的审计底稿模板"
+    )
+
+with col2:
+    uploaded_file = st.file_uploader(
+        "拖拽文件或点击浏览",
+        type=["pdf", "png", "jpg", "jpeg"],
+        label_visibility="collapsed"
+    )
+    st.caption("支持 PDF、PNG、JPG 格式，单次上传一份文件")
 )
 
 # -------------------- API 配置 --------------------
