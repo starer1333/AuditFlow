@@ -315,7 +315,7 @@ with st.expander("📝 审计意见参考库（系统内置范例，可编辑）
     )
 
 
-        if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
+     if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
         with st.spinner("⏳ 正在调用多模态大模型分析..."):
             # 将图片转为 base64
             img_bytes = uploaded_file.getvalue()
