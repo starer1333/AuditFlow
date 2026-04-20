@@ -16,7 +16,7 @@ import os
 # -------------------- 页面配置（必须放在最前面）--------------------
 st.set_page_config(
     page_title="AuditFlow — 审计数据中枢",
-    page_icon="🌊",
+    page_icon="💡",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
