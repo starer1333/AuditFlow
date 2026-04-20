@@ -236,7 +236,7 @@ if uploaded_file:
         st.image(uploaded_file, width=400)
 
     if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
-                  with st.spinner("⏳ 正在调用多模态大模型分析..."):
+         with st.spinner("⏳ 正在调用多模态大模型分析..."):
             # 将图片转为 base64
             img_bytes = uploaded_file.getvalue()
             img_b64 = base64.b64encode(img_bytes).decode()
@@ -599,7 +599,25 @@ if uploaded_file:
                 mime="application/json",
                 use_container_width=True
             )
+with st.expander("🔒 数据安全与隐私保护", expanded=False):
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 20px; padding: 1.5rem; border: 1px solid #334155;">
+        <p style="color: #cbd5e1; font-size: 1rem; line-height: 1.6;">
+            AuditFlow 将数据安全置于首位，为企业提供<span style="color: #2dd4bf;">私有化部署</span>与<span style="color: #2dd4bf;">内网隔离</span>方案：
+        </p>
+        <ul style="color: #94a3b8; margin-top: 1rem; line-height: 1.8;">
+            <li><span style="color: #fbbf24;">🏢 内网部署</span> — 系统可完全部署在企业内部服务器或办公电脑，无需连接外网，杜绝数据外泄风险。</li>
+            <li><span style="color: #fbbf24;">🔑 私有化大模型</span> — 支持接入企业自有的本地大模型（如Ollama、私有化API），所有数据处理均在内部完成。</li>
+            <li><span style="color: #fbbf24;">📜 合规保障</span> — 严格遵循《个人信息保护法》《数据安全法》及审计底稿保密要求，不存储任何源文件与提取结果。</li>
+            <li><span style="color: #fbbf24;">🛡️ 零数据残留</span> — 所有上传文件在处理完成后即时删除，不留痕迹。</li>
+        </ul>
+        <p style="color: #cbd5e1; margin-top: 1rem;">
+            无论是四大会计师事务所还是企业内审部门，均可放心将AuditFlow嵌入现有审计流程。
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
+st.divider()
 # -------------------- 页脚品牌语 --------------------
 st.divider()
 st.markdown("""
