@@ -7,6 +7,7 @@ AuditFlow — 审计数据中枢（完整商赛版）
 import streamlit as st
 import requests
 import base64
+import pdfplumber
 import json
 import io
 import re
@@ -234,7 +235,37 @@ if uploaded_file:
     st.success(f"✅ 已上传：{uploaded_file.name} ({len(uploaded_file.getvalue())/1024:.1f} KB)")
     if uploaded_file.type.startswith("image"):
         st.image(uploaded_file, width=400)
-
+        
+# -------------------- 审计意见参考库（内置固定PDF） --------------------
+with st.expander("📝 审计意见参考库（系统内置范例）", expanded=True):
+    # 读取固定的参考PDF
+    reference_pdf_path = os.path.join(os.path.dirname(__file__), "audit_opinion_reference.pdf")
+    audit_opinion_reference = ""
+    
+    if os.path.exists(reference_pdf_path):
+        try:
+            import pdfplumber
+            with pdfplumber.open(reference_pdf_path) as pdf:
+                extracted_text = ""
+                for page in pdf.pages[:3]:  # 只提取前3页
+                    page_text = page.extract_text()
+                    if page_text:
+                        extracted_text += page_text + "\n"
+            audit_opinion_reference = extracted_text[:2000]
+            st.success(f"✅ 已加载内置审计意见参考范例（前2000字符）")
+        except Exception as e:
+            st.warning(f"内置参考PDF读取失败：{e}")
+    else:
+        st.info("未找到内置参考PDF，将使用默认提示风格。")
+    
+    # 提供手动编辑区域
+    audit_opinion_reference = st.text_area(
+        "参考范例（可手动编辑）",
+        value=audit_opinion_reference,
+        placeholder="此处将自动加载内置PDF内容，也可手动编辑……",
+        help="系统已从内置PDF中提取参考文字，您可在此修改后用于调教大模型输出风格。"
+    )
+    
     if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
          with st.spinner("⏳ 正在调用多模态大模型分析..."):
             # 将图片转为 base64
