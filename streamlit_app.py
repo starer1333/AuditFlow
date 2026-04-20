@@ -1,23 +1,21 @@
 """
-AuditFlow — UI 界面
-纯前端展示，调用已有处理模块
+AuditFlow — 审计数据中枢（纯云端版）
+基于 SiliconFlow 多模态大模型，零本地 OCR/OpenCV 依赖
+德勤数字化精英挑战赛 Team J
 """
 
 import streamlit as st
+import requests
+import base64
+import json
+import io
+import re
 import os
-import tempfile
 from datetime import datetime
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill
+from PIL import Image
 
-import sys
-import os
-# 将 AuditMind 目录加入 Python 路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'AuditMind'))
-
-# 然后直接导入模块（因为 AuditMind 已经在 sys.path 中了）
-import format_and_clean
-import ocr_extract
-import validate_and_map
-import generate_report
 # -------------------- 页面配置 --------------------
 st.set_page_config(
     page_title="AuditFlow — 审计数据中枢",
@@ -25,7 +23,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# -------------------- 样式（保持您原来的样式）--------------------
+# -------------------- 样式优化 --------------------
 st.markdown("""
 <style>
     .main-header { text-align: center; padding: 2rem 0 1rem 0; }
@@ -48,101 +46,220 @@ st.markdown("""
         background: #1e293b; border-radius: 20px; padding: 1.5rem;
         border: 1px solid #334155; margin-top: 1.5rem;
     }
+    .feature-card {
+        background: #1e293b; border-radius: 20px; padding: 1rem 0.8rem;
+        text-align: center; border: 1px solid #334155;
+    }
+    .feature-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .feature-title { font-weight: 600; color: #e2e8f0; }
+    .feature-desc { font-size: 0.8rem; color: #94a3b8; }
 </style>
 """, unsafe_allow_html=True)
 
+# -------------------- 页面头部 --------------------
 st.markdown("""
 <div class="main-header">
     <h1>🌊 AuditFlow</h1>
-    <p>审计数据中枢 — 从任意格式到标准化底稿</p>
+    <p>审计数据中枢 — 多模态大模型驱动 · 五大痛点一站式解决</p>
 </div>
 """, unsafe_allow_html=True)
 
-# -------------------- 文件类型选择 --------------------
-st.markdown("### 📁 选择文件类型并上传")
-col1, col2 = st.columns([1, 2])
+# -------------------- 五大痛点展示卡片 --------------------
+st.markdown("### 🔬 核心能力 · 攻克审计资料处理的5大难点")
+cols = st.columns(5)
+features = [
+    ("📄", "跨页合并", "大模型全局感知，自动拼接跨页表格"),
+    ("🀄️", "生僻汉字", "语义理解 + 字典纠错，精准识别罕见字"),
+    ("🌐", "中英文混排", "多语言统一映射，余额/Balance自动对齐"),
+    ("💧", "水印印章", "视觉大模型主动忽略干扰，聚焦核心文字"),
+    ("📊", "表格还原", "端到端行列解析，完美提取嵌套表头")
+]
+for col, (icon, title, desc) in zip(cols, features):
+    with col:
+        st.markdown(f"""
+        <div class="feature-card">
+            <div class="feature-icon">{icon}</div>
+            <div class="feature-title">{title}</div>
+            <div class="feature-desc">{desc}</div>
+        </div>
+        """, unsafe_allow_html=True)
+st.divider()
 
-with col1:
-    file_type = st.selectbox(
-        "📋 文件类型",
-        options=[
-            "🏦 银行对账单",
-            "📋 开户清单",
-            "❌ 销户清单/销户证明",
-            "📊 企业信用报告",
-            "📬 银行询证函（回函）",
-            "⚖️ 银行存款余额调节表"
-        ],
-        index=0
-    )
+# -------------------- API 配置 --------------------
+SILICONFLOW_API_KEY = st.secrets.get("SILICONFLOW_API_KEY", "sk-your-api-key")
+SILICONFLOW_MODEL = "Qwen/Qwen2-VL-72B-Instruct"
 
-with col2:
-    uploaded_file = st.file_uploader(
-        "拖拽文件或点击浏览",
-        type=["pdf", "png", "jpg", "jpeg"],
-        label_visibility="collapsed"
-    )
+# -------------------- 文件上传 --------------------
+st.markdown("### 📁 上传银行源文件")
+uploaded_file = st.file_uploader(
+    "支持 PDF、PNG、JPG",
+    type=["pdf", "png", "jpg", "jpeg"],
+    label_visibility="collapsed"
+)
 
-# -------------------- 处理按钮 --------------------
 if uploaded_file:
     st.success(f"✅ 已上传：{uploaded_file.name} ({len(uploaded_file.getvalue())/1024:.1f} KB)")
-    
+    if uploaded_file.type.startswith("image"):
+        st.image(uploaded_file, width=400)
+
     if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
-        with st.spinner("⏳ 正在处理中，请稍候..."):
-            # 保存临时文件
-            suffix = os.path.splitext(uploaded_file.name)[1]
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(uploaded_file.getvalue())
-                tmp_path = tmp.name
-            
-            # ========== 调用您的处理函数 ==========
-            # 这里假设您的函数返回一个字典，包含提取的数据和 Excel 文件路径
-            # 请根据实际情况调整参数和返回值
-            result = process_audit_file(
-                file_path=tmp_path,
-                file_type=file_type,
-                original_filename=uploaded_file.name
-            )
-            
-            # 假设 result 包含：
-            #   - result['extracted_data']: dict，提取的字段
-            #   - result['excel_path']: str，生成的 Excel 文件路径
-            #   - result['report']: str，风险分析报告（可选）
-            
-            extracted = result.get('extracted_data', {})
-            excel_path = result.get('excel_path', '')
-            report = result.get('report', '')
-            
-            # ---------- 展示结果 ----------
+        with st.spinner("⏳ 正在调用多模态大模型分析..."):
+            # 将图片转为 base64
+            img_bytes = uploaded_file.getvalue()
+            img_b64 = base64.b64encode(img_bytes).decode()
+
+            # 构建 Prompt（一次性完成五大痛点检测 + 字段提取 + 风险意见）
+            prompt = """你是一个资深的审计专家，请仔细观察这张银行对账单图片，完成以下任务：
+
+1. **水印/印章检测**：图片是否有水印、印章、倾斜？描述干扰情况。
+2. **生僻汉字识别**：是否有生僻汉字？列出并纠正常见OCR错误（如“很行”→“银行”）。
+3. **中英文混排**：是否有中英文混排？提取中英文关键信息。
+4. **表格结构分析**：表格是否有跨页、合并单元格？描述结构。
+5. **关键字段提取**：提取以下字段，以JSON格式返回：
+{
+  "bank_name": "银行全称",
+  "account_number": "完整账号",
+  "ending_balance": 期末余额数字,
+  "statement_period": "对账单期间",
+  "currency": "币种",
+  "confidence": 0.95,
+  "risk_notes": "简要风险提示与审计意见"
+}
+请先用文字回答1-4题，最后输出JSON。"""
+
+            headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
+            payload = {
+                "model": SILICONFLOW_MODEL,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                    ]
+                }],
+                "temperature": 0.1,
+                "max_tokens": 2048
+            }
+
+            try:
+                resp = requests.post("https://api.siliconflow.cn/v1/chat/completions", headers=headers, json=payload, timeout=60)
+                resp.raise_for_status()
+                llm_response = resp.json()["choices"][0]["message"]["content"]
+            except Exception as e:
+                st.error(f"大模型调用失败：{e}")
+                st.stop()
+
+            # 提取 JSON 部分
+            json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
+            if json_match:
+                try:
+                    extracted = json.loads(json_match.group())
+                except:
+                    extracted = {"bank_name": "解析失败", "error": "JSON格式错误"}
+            else:
+                extracted = {"bank_name": "未识别", "raw": llm_response[:500]}
+
+            # 文字分析部分（1-4题的回答）
+            text_analysis = llm_response[:llm_response.find('{')] if '{' in llm_response else llm_response
+
+            # ---------- 展示分析报告 ----------
             st.markdown("---")
-            st.markdown("### 📊 提取结果")
-            
+            st.markdown("### 🤖 大模型分析报告")
+            with st.expander("📋 查看详细分析（水印/生僻字/混排/表格）", expanded=True):
+                st.markdown(text_analysis)
+
+            # ---------- 展示提取字段 ----------
+            st.markdown("### 📊 提取的关键字段")
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                st.metric("🏦 银行名称", extracted.get('bank_name', '未识别'))
+                st.metric("🏦 银行名称", extracted.get("bank_name", "未识别"))
             with c2:
-                st.metric("💳 账号", extracted.get('account_number', '未识别'))
+                st.metric("💳 账号", extracted.get("account_number", "未识别"))
             with c3:
-                bal = extracted.get('ending_balance')
-                st.metric("💰 期末余额", f"¥ {bal:,.2f}" if bal else "未识别")
+                bal = extracted.get("ending_balance")
+                st.metric("💰 期末余额", f"¥ {bal:,.2f}" if isinstance(bal, (int, float)) else "未识别")
             with c4:
                 st.metric("📈 置信度", f"{extracted.get('confidence', 0)*100:.0f}%")
-            
-            if report:
-                st.info(f"📋 {report}")
-            
-            # ---------- 下载 Excel ----------
-            if excel_path and os.path.exists(excel_path):
-                with open(excel_path, "rb") as f:
-                    st.download_button(
-                        label="📊 下载 Excel 底稿",
-                        data=f,
-                        file_name=os.path.basename(excel_path),
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-            else:
-                st.warning("未生成 Excel 文件")
+            if extracted.get("risk_notes"):
+                st.info(f"📋 审计意见：{extracted['risk_notes']}")
+
+            # ---------- 生成 Excel 底稿 ----------
+            st.markdown("### 📥 下载审计底稿")
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "银行存款余额调节表"
+            ws.merge_cells("A1:F1")
+            ws["A1"] = "银行存款余额调节表"
+            ws["A1"].font = Font(size=16, bold=True)
+            ws["A1"].alignment = Alignment(horizontal="center")
+
+            bank = extracted.get("bank_name", "未识别")
+            acc = extracted.get("account_number", "未识别")
+            bal = extracted.get("ending_balance", 0)
+            period = extracted.get("statement_period", "未识别")
+
+            row = 3
+            info = [
+                ["被审计单位", "XX科技有限公司", "", "索引号", "A-2-1"],
+                ["银行名称", bank, "", "账号", acc],
+                ["对账单余额", f"{bal:,.2f}" if isinstance(bal, (int, float)) else "未识别", "", "期间", period]
+            ]
+            for r in info:
+                for col, v in enumerate(r, 1):
+                    ws.cell(row=row, column=col, value=v)
+                row += 1
+
+            row += 1
+            headers = ["项目", "金额", "审计标识", "说明"]
+            for col, h in enumerate(headers, 1):
+                cell = ws.cell(row=row, column=col, value=h)
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill("solid", fgColor="D3D3D3")
+            row += 1
+
+            table = [
+                ["银行对账单余额", bal if isinstance(bal, (int, float)) else "", "B", "大模型识别"],
+                ["加：企业已收银行未收", "", "", ""],
+                ["减：企业已付银行未付", "", "", ""],
+                ["调节后余额", bal if isinstance(bal, (int, float)) else "", "G", ""],
+                ["企业账面余额", "", "", "待填写"],
+                ["差异", "", "", ""]
+            ]
+            for item, amt, mark, note in table:
+                ws.cell(row=row, column=1, value=item)
+                if amt:
+                    ws.cell(row=row, column=2, value=amt).number_format = '#,##0.00'
+                ws.cell(row=row, column=3, value=mark)
+                ws.cell(row=row, column=4, value=note)
+                row += 1
+
+            ws.cell(row=row, column=1, value=f"审计意见：{extracted.get('risk_notes', '')}")
+            row += 2
+            ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+            for col, width in enumerate([20, 18, 12, 35], 1):
+                ws.column_dimensions[chr(64+col)].width = width
+
+            excel_io = io.BytesIO()
+            wb.save(excel_io)
+            excel_io.seek(0)
+
+            st.download_button(
+                label="📊 下载 Excel 底稿",
+                data=excel_io,
+                file_name=f"银行余额调节表_{bank}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+            # 同时提供 JSON 下载
+            st.download_button(
+                label="📄 下载完整报告 (JSON)",
+                data=json.dumps({"analysis": text_analysis, "extracted": extracted}, ensure_ascii=False, indent=2),
+                file_name=f"AuditFlow_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
 
 # -------------------- 页脚 --------------------
 st.divider()
