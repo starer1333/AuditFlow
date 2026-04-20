@@ -8,15 +8,16 @@ import os
 import tempfile
 from datetime import datetime
 
-# ==================== 导入您的处理模块 ====================
-# 请根据您的实际文件名和函数名修改下面的导入
-# 假设您有一个 audit_processor.py，里面有一个 process() 函数
-try:
-    from audit_processor import process_audit_file
-except ImportError:
-    st.error("❌ 无法导入处理模块，请确保 audit_processor.py 在当前目录")
-    st.stop()
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "AuditMind"))
+
+# 导入您已有的功能模块（根据实际文件名调整）
+from modules.file_handler import FileHandler
+from modules.image_cleaner import ImageCleaner
+from modules.ocr_engine import OCREngine
+from modules.llm_extractor import LLMExtractor
+from modules.data_validator import DataValidator
+from modules.excel_writer import ExcelWriter
 # -------------------- 页面配置 --------------------
 st.set_page_config(
     page_title="AuditFlow — 审计数据中枢",
