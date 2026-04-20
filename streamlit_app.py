@@ -45,22 +45,42 @@ st.markdown("""
         border: 1px solid #334155; margin-top: 1.5rem;
     }
     .feature-card {
-        background: #1e293b; border-radius: 20px; padding: 1rem 0.8rem;
+        background: #1e293b; border-radius: 20px; padding: 1.2rem 0.8rem;
         text-align: center; border: 1px solid #334155;
     }
     .feature-icon { font-size: 2rem; margin-bottom: 0.5rem; }
-    .feature-title { font-weight: 600; color: #e2e8f0; }
-    .feature-desc { font-size: 0.8rem; color: #94a3b8; }
+    .feature-title { font-weight: 600; color: #e2e8f0; font-size: 1rem; }
+    .feature-desc { font-size: 0.9rem; color: #b0bec5; line-height: 1.4; }
     .story-box {
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
         border-radius: 20px; padding: 2rem; border: 1px solid #334155;
         margin: 2rem 0;
     }
-    .quote-text { font-size: 1.1rem; font-style: italic; color: #a0aec0; }
-    .comparison-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-    .comparison-table th { background: #4f6af5; color: white; padding: 0.8rem; }
-    .comparison-table td { padding: 0.8rem; border: 1px solid #334155; }
+    .quote-text { font-size: 1.1rem; font-style: italic; color: #cbd5e1; }
+    .auditor-name {
+        color: #fbbf24; font-weight: 600; font-style: normal;
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .comparison-table { 
+        width: 100%; border-collapse: collapse; margin: 1rem 0; 
+        border: 1px solid #475569;
+    }
+    .comparison-table th { 
+        background: #4f6af5; color: white; padding: 0.8rem; 
+        border: 1px solid #64748b; text-align: center;
+    }
+    .comparison-table td { 
+        padding: 0.8rem; border: 1px solid #475569; 
+    }
     .highlight { color: #68d391; font-weight: 600; }
+    .theory-box {
+        background: #1e293b; border-radius: 15px; padding: 1.5rem;
+        border: 1px solid #334155;
+    }
+    .theory-label { color: #94a3b8; font-size: 0.9rem; }
+    .theory-quote { font-style: italic; color: #cbd5e1; }
+    .theory-highlight { color: #60a5fa; font-weight: 600; }
     .footer { text-align: center; padding: 2rem 0; color: #64748b; }
 </style>
 """, unsafe_allow_html=True)
@@ -77,8 +97,8 @@ st.markdown("""
 with st.expander("📖 我们的故事：从凌晨三点的审计师说起", expanded=False):
     st.markdown("""
     <div class="story-box">
-        <p class="quote-text">“凌晨三点，我揉了揉发酸的眼睛。面前是几百页带水印的银行对账单、开户清单、信用报告……格式五花八门，数据散落在各处。这个月底的审计报告，又是一场和时间的赛跑。我多么希望，能有一个‘数字化大脑’帮我处理这些重复劳动，让我专注于真正重要的专业判断。”</p>
-        <p style="text-align: right; margin-top: 1rem;">—— 一位四大审计师的自白</p>
+        <p class="quote-text">“凌晨三点，我揉了揉发酸的眼睛。面前是几百页带水印的银行对账单、开户清单、信用报告……格式五花八门，数据散落在各处。这个月底的审计报告，又是一场和时间的赛跑。我多么希望，能有一个数字化大脑帮我处理这些重复劳动，让我专注于真正重要的专业判断。”</p>
+        <p style="text-align: right; margin-top: 1rem;">—— <span class="auditor-name">一位四大审计师</span> 的自白</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -120,12 +140,12 @@ with col1:
 with col2:
     st.markdown("### 🧠 理论支撑")
     st.markdown("""
-    <div style="background:#1e293b; border-radius:15px; padding:1.5rem; border:1px solid #334155;">
-        <p style="color:#94a3b8; font-size:0.9rem;">德勤研究指出：</p>
-        <p style="font-style:italic;">“AI将重构审计作业链，从‘经验驱动’转向‘智能驱动’。”</p>
-        <p style="color:#94a3b8; font-size:0.9rem; margin-top:1rem;">杨卓凡导师强调：</p>
-        <p style="font-style:italic;">“审计数字化大脑需具备感知、认知、决策、协同四大能力，实现从‘单点工具’到‘统一智能层’的跃迁。”</p>
-        <p style="margin-top:1rem;">✅ AuditFlow正是这一理念的完美实践。</p>
+    <div class="theory-box">
+        <p class="theory-label">德勤研究指出：</p>
+        <p class="theory-quote">“AI将重构审计作业流程，从<span class="theory-highlight">经验驱动</span>转向<span class="theory-highlight">智能驱动</span>。”</p>
+        <p class="theory-label" style="margin-top:1rem;">杨卓凡导师强调：</p>
+        <p class="theory-quote">“审计数字化大脑需具备<span class="theory-highlight">感知、认知、决策、协同</span>四大能力，实现从<span class="theory-highlight">单点工具</span>到<span class="theory-highlight">统一智能层</span>的跃迁。”</p>
+        <p style="margin-top:1rem; color: #68d391;">✅ AuditFlow正是这一理念的完美实践。</p>
     </div>
     """, unsafe_allow_html=True)
 
