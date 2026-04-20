@@ -8,9 +8,12 @@ import os
 import tempfile
 from datetime import datetime
 
-sys.path.insert(0, os.path.dirname(__file__))
+import sys
+import os
+# 将 AuditMind 目录加入 Python 路径
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'AuditMind'))
 
-# 导入您的功能模块（根据实际文件名）
+# 然后直接导入模块（因为 AuditMind 已经在 sys.path 中了）
 import format_and_clean
 import ocr_extract
 import validate_and_map
