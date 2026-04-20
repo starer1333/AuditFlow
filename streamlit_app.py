@@ -1,6 +1,6 @@
 """
 AuditFlow — 审计数据中枢
-从任意格式的银行源文件到标准化审计底稿，一站式自动处理
+从任意格式的银行源文件到标准化审计底稿，一站式智能处理
 德勤数字化精英挑战赛 Team J
 """
 
@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# -------------------- 样式优化 --------------------
+# -------------------- 样式优化（已修复卡片对齐、高度统一）--------------------
 st.markdown("""
 <style>
     /* 主色调：深海蓝紫渐变 */
@@ -43,30 +43,26 @@ st.markdown("""
         color: #a0aec0;
     }
     
-    /* 上传区域卡片 */
-    .upload-card {
-        background: rgba(30, 41, 59, 0.8);
-        border-radius: 24px;
-        padding: 2rem;
-        border: 1px solid #334155;
-        backdrop-filter: blur(10px);
-        margin-bottom: 1.5rem;
-    }
-    
-    /* 功能特性卡片 */
+    /* 五列卡片网格——强制高度一致、内容居中 */
     .feature-grid {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        display: flex;
+        flex-wrap: nowrap;
         gap: 1rem;
         margin: 2rem 0;
     }
     .feature-card {
+        flex: 1;
         background: #1e293b;
         border-radius: 20px;
-        padding: 1.5rem 1rem;
+        padding: 1.5rem 0.8rem;
         text-align: center;
         border: 1px solid #334155;
         transition: all 0.2s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        min-height: 220px;
     }
     .feature-card:hover {
         border-color: #4f6af5;
@@ -75,6 +71,7 @@ st.markdown("""
     .feature-icon {
         font-size: 2.2rem;
         margin-bottom: 0.8rem;
+        line-height: 1.2;
     }
     .feature-title {
         font-size: 1rem;
@@ -86,6 +83,17 @@ st.markdown("""
         font-size: 0.8rem;
         color: #94a3b8;
         line-height: 1.4;
+        padding: 0 0.2rem;
+    }
+    
+    /* 上传区域卡片 */
+    .upload-card {
+        background: rgba(30, 41, 59, 0.8);
+        border-radius: 24px;
+        padding: 2rem;
+        border: 1px solid #334155;
+        backdrop-filter: blur(10px);
+        margin-bottom: 1.5rem;
     }
     
     /* 结果卡片 */
@@ -150,21 +158,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# -------------------- 五大核心功能卡片（对应您的5大痛点）--------------------
+# -------------------- 五大核心功能卡片（已修复对齐与高度）--------------------
 st.markdown("### 🔬 核心能力 · 攻克审计资料处理的5大难点")
 
-col1, col2, col3, col4, col5 = st.columns(5)
+# 使用 columns 但通过 CSS 保证高度一致
+cols = st.columns(5)
 
-with col1:
+with cols[0]:
     st.markdown("""
     <div class="feature-card">
-        <div class="feature-icon">📄➡️📑</div>
+        <div class="feature-icon">📄</div>
         <div class="feature-title">跨页合并与表格重建</div>
         <div class="feature-desc">智能识别跨页表格，自动拼接表头与数据行，完美还原合并单元格与嵌套结构</div>
     </div>
     """, unsafe_allow_html=True)
 
-with col2:
+with cols[1]:
     st.markdown("""
     <div class="feature-card">
         <div class="feature-icon">🀄️</div>
@@ -173,7 +182,7 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
-with col3:
+with cols[2]:
     st.markdown("""
     <div class="feature-card">
         <div class="feature-icon">🌐</div>
@@ -182,7 +191,7 @@ with col3:
     </div>
     """, unsafe_allow_html=True)
 
-with col4:
+with cols[3]:
     st.markdown("""
     <div class="feature-card">
         <div class="feature-icon">💧</div>
@@ -191,7 +200,7 @@ with col4:
     </div>
     """, unsafe_allow_html=True)
 
-with col5:
+with cols[4]:
     st.markdown("""
     <div class="feature-card">
         <div class="feature-icon">📊</div>
@@ -207,7 +216,6 @@ st.divider()
 st.markdown("### 📁 选择文件类型并上传")
 st.markdown("*请先选择您要上传的审计资料类型，然后上传对应的扫描件或图片*")
 
-# 两列布局：左为文件类型选择，右为上传区
 col_left, col_right = st.columns([1, 2])
 
 with col_left:
@@ -247,9 +255,16 @@ with col_right:
         label_visibility="collapsed"
     )
     
-    if uploaded_file:
-        file_size = len(uploaded_file.getvalue()) / 1024
-        st.success(f"✅ 已上传：{uploaded_file.name} ({file_size:.1f} KB)")
+    if uploaded_file is not None:
+        # 二次校验：虽然 file_uploader 限制了类型，但防御性编程检查扩展名
+        allowed_ext = ('.pdf', '.png', '.jpg', '.jpeg')
+        file_name = uploaded_file.name.lower()
+        if not file_name.endswith(allowed_ext):
+            st.error(f"❌ 不支持的文件格式！请上传 PDF、PNG、JPG 或 JPEG 文件。")
+            uploaded_file = None  # 置空，防止后续处理
+        else:
+            file_size = len(uploaded_file.getvalue()) / 1024
+            st.success(f"✅ 已上传：{uploaded_file.name} ({file_size:.1f} KB)")
 
 
 # -------------------- 处理按钮 --------------------
@@ -269,7 +284,7 @@ if process_clicked:
         st.warning("⚠️ 请先选择要上传的文件类型（如：银行对账单、开户清单等）")
     # 检查是否上传了文件
     elif uploaded_file is None:
-        st.warning("⚠️ 请先上传需要处理的文件")
+        st.warning("⚠️ 请先上传需要处理的文件（仅支持 PDF/PNG/JPG/JPEG）")
     else:
         # 正常处理流程
         with st.spinner("⏳ 正在处理中，请稍候..."):
@@ -316,7 +331,7 @@ if process_clicked:
             st.session_state['processing_done'] = True
         
         st.success("✅ 处理完成！")
-        st.balloons()
+        # st.balloons()   # 已移除气球，保持专业
 
 
 # -------------------- 结果展示 --------------------
@@ -332,7 +347,9 @@ if 'processing_done' in st.session_state and st.session_state['processing_done']
         # 第一行：核心指标
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            st.metric("🏦 银行名称", data.get("bank_name", "未识别")[:15] + "..." if data.get("bank_name") and len(data.get("bank_name", "")) > 15 else data.get("bank_name", "未识别"))
+            bank_name = data.get("bank_name", "未识别")
+            display_name = bank_name[:15] + "..." if len(bank_name) > 15 else bank_name
+            st.metric("🏦 银行名称", display_name)
         with c2:
             st.metric("💳 账号", data.get("account_number", "未识别"))
         with c3:
@@ -372,7 +389,6 @@ if 'processing_done' in st.session_state and st.session_state['processing_done']
     
     dl_col1, dl_col2, dl_col3 = st.columns(3)
     with dl_col1:
-        # 生成模拟Excel
         json_str = json.dumps(data, ensure_ascii=False, indent=2)
         st.download_button(
             label="📊 下载Excel底稿（模拟）",
@@ -391,7 +407,7 @@ if 'processing_done' in st.session_state and st.session_state['processing_done']
             use_container_width=True
         )
     with dl_col3:
-        if uploaded_file:
+        if uploaded_file is not None:
             st.download_button(
                 label="📎 重新下载源文件",
                 data=uploaded_file.getvalue(),
@@ -405,7 +421,6 @@ if 'processing_done' in st.session_state and st.session_state['processing_done']
 elif 'processing_done' not in st.session_state:
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # 使用示例卡片
     st.markdown("### 💡 快速体验")
     st.markdown("*点击下方按钮，使用内置示例银行对账单立即体验完整流程*")
     
