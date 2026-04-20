@@ -236,7 +236,7 @@ if uploaded_file:
         st.image(uploaded_file, width=400)
 
     if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
-                with st.spinner("⏳ 正在调用多模态大模型分析..."):
+                  with st.spinner("⏳ 正在调用多模态大模型分析..."):
             # 将图片转为 base64
             img_bytes = uploaded_file.getvalue()
             img_b64 = base64.b64encode(img_bytes).decode()
@@ -275,7 +275,6 @@ if uploaded_file:
    - 给出下一步审计建议
 
 请用专业的审计术语作答，保持客观、严谨的风格。先用文字回答1、3、4、5，最后输出JSON。"""
-
 
             headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
             payload = {
