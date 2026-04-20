@@ -1,153 +1,67 @@
 """
 AuditFlow — 审计数据中枢
-从任意格式的银行源文件到标准化审计底稿，一站式智能处理
+真实 OCR 识别 + 大模型语义理解 + 底稿生成
 德勤数字化精英挑战赛 Team J
 """
 
 import streamlit as st
-import pandas as pd
+import os
+import tempfile
 import json
-import base64
+import re
 from datetime import datetime
+import time
+import cv2
+import numpy as np
 from PIL import Image
 import io
-import os
 
-# -------------------- 页面配置（必须放在最前面）--------------------
+# -------------------- 页面配置 --------------------
 st.set_page_config(
     page_title="AuditFlow — 审计数据中枢",
-    page_icon="💡",
+    page_icon="🌊",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# -------------------- 样式优化（已修复卡片对齐、高度统一）--------------------
+# -------------------- 样式优化 --------------------
 st.markdown("""
 <style>
-    /* 主色调：深海蓝紫渐变 */
-    .main-header {
-        text-align: center;
-        padding: 1.5rem 0 1rem 0;
-        margin-bottom: 1rem;
-    }
+    .main-header { text-align: center; padding: 1.5rem 0 1rem 0; }
     .main-header h1 {
-        font-size: 3.2rem;
-        font-weight: 700;
-        margin-bottom: 0.3rem;
+        font-size: 3.2rem; font-weight: 700; margin-bottom: 0.3rem;
         background: linear-gradient(135deg, #4f6af5 0%, #7c3aed 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-    .main-header p {
-        font-size: 1.2rem;
-        color: #a0aec0;
-    }
-    
-    /* 五列卡片网格——强制高度一致、内容居中 */
-    .feature-grid {
-        display: flex;
-        flex-wrap: nowrap;
-        gap: 1rem;
-        margin: 2rem 0;
-    }
+    .main-header p { font-size: 1.2rem; color: #a0aec0; }
+    .feature-grid { display: flex; flex-wrap: nowrap; gap: 1rem; margin: 2rem 0; }
     .feature-card {
-        flex: 1;
-        background: #1e293b;
-        border-radius: 20px;
-        padding: 1.5rem 0.8rem;
-        text-align: center;
-        border: 1px solid #334155;
-        transition: all 0.2s;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        min-height: 220px;
+        flex: 1; background: #1e293b; border-radius: 20px; padding: 1.5rem 0.8rem;
+        text-align: center; border: 1px solid #334155; transition: all 0.2s;
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: flex-start; min-height: 220px;
     }
-    .feature-card:hover {
-        border-color: #4f6af5;
-        transform: translateY(-3px);
-    }
-    .feature-icon {
-        font-size: 2.2rem;
-        margin-bottom: 0.8rem;
-        line-height: 1.2;
-    }
-    .feature-title {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #e2e8f0;
-        margin-bottom: 0.5rem;
-    }
-    .feature-desc {
-        font-size: 0.8rem;
-        color: #94a3b8;
-        line-height: 1.4;
-        padding: 0 0.2rem;
-    }
-    
-    /* 上传区域卡片 */
-    .upload-card {
-        background: rgba(30, 41, 59, 0.8);
-        border-radius: 24px;
-        padding: 2rem;
-        border: 1px solid #334155;
-        backdrop-filter: blur(10px);
-        margin-bottom: 1.5rem;
-    }
-    
-    /* 结果卡片 */
-    .result-card {
-        background: #1e293b;
-        border-radius: 20px;
-        padding: 1.5rem;
-        border: 1px solid #334155;
-        margin-top: 1.5rem;
-    }
-    
-    /* 提示框 */
-    .info-box {
-        background: #1e3a5f;
-        border-radius: 12px;
-        padding: 1rem 1.5rem;
-        border-left: 4px solid #3b82f6;
-        margin: 1rem 0;
-    }
-    
-    /* 按钮样式 */
+    .feature-card:hover { border-color: #4f6af5; transform: translateY(-3px); }
+    .feature-icon { font-size: 2.2rem; margin-bottom: 0.8rem; line-height: 1.2; }
+    .feature-title { font-size: 1rem; font-weight: 600; color: #e2e8f0; margin-bottom: 0.5rem; }
+    .feature-desc { font-size: 0.8rem; color: #94a3b8; line-height: 1.4; padding: 0 0.2rem; }
+    .result-card { background: #1e293b; border-radius: 20px; padding: 1.5rem; border: 1px solid #334155; margin-top: 1.5rem; }
     .stButton > button {
         background: linear-gradient(135deg, #4f6af5 0%, #7c3aed 100%);
-        color: white;
-        border: none;
-        border-radius: 40px;
-        padding: 0.7rem 2rem;
-        font-weight: 600;
-        font-size: 1.1rem;
-        transition: all 0.2s;
-        border: 1px solid #4f6af5;
+        color: white; border: none; border-radius: 40px; padding: 0.7rem 2rem;
+        font-weight: 600; font-size: 1.1rem; transition: all 0.2s; border: 1px solid #4f6af5;
     }
-    .stButton > button:hover {
-        transform: scale(1.02);
-        box-shadow: 0 0 20px rgba(79, 106, 245, 0.4);
-    }
-    
-    /* 文件上传器 */
+    .stButton > button:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(79, 106, 245, 0.4); }
     .stFileUploader > div {
-        border: 2px dashed #4f6af5 !important;
-        border-radius: 20px !important;
-        background: rgba(79, 106, 245, 0.05) !important;
-        padding: 2rem !important;
+        border: 2px dashed #4f6af5 !important; border-radius: 20px !important;
+        background: rgba(79, 106, 245, 0.05) !important; padding: 2rem !important;
     }
-    
-    /* 选择框 */
     .stSelectbox > div > div {
-        border-radius: 40px !important;
-        background: #0f172a !important;
+        border-radius: 40px !important; background: #0f172a !important;
         border: 1px solid #334155 !important;
     }
 </style>
 """, unsafe_allow_html=True)
-
 
 # -------------------- 页面头部 --------------------
 st.markdown("""
@@ -158,10 +72,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# -------------------- 五大核心功能卡片（已修复对齐与高度）--------------------
+# -------------------- 五大核心功能卡片 --------------------
 st.markdown("### 🔬 核心能力 · 攻克审计资料处理的5大难点")
 
-# 使用 columns 但通过 CSS 保证高度一致
 cols = st.columns(5)
 
 with cols[0]:
@@ -234,7 +147,6 @@ with col_left:
         help="选择正确的文件类型有助于我们使用对应的识别模板，提高准确率"
     )
     
-    # 显示每种文件类型的说明
     if file_type != "请选择...":
         type_info = {
             "🏦 银行对账单": "**用途**：获取期末余额及交易流水，是调节表的核心数据源。\n\n**常见格式**：盖章PDF扫描件、图片",
@@ -256,12 +168,11 @@ with col_right:
     )
     
     if uploaded_file is not None:
-        # 二次校验：虽然 file_uploader 限制了类型，但防御性编程检查扩展名
         allowed_ext = ('.pdf', '.png', '.jpg', '.jpeg')
         file_name = uploaded_file.name.lower()
         if not file_name.endswith(allowed_ext):
             st.error(f"❌ 不支持的文件格式！请上传 PDF、PNG、JPG 或 JPEG 文件。")
-            uploaded_file = None  # 置空，防止后续处理
+            uploaded_file = None
         else:
             file_size = len(uploaded_file.getvalue()) / 1024
             st.success(f"✅ 已上传：{uploaded_file.name} ({file_size:.1f} KB)")
@@ -277,180 +188,400 @@ with col_btn2:
     )
 
 
-# -------------------- 上传/选择提示逻辑 --------------------
-if process_clicked:
-    # 检查是否选择了文件类型
-    if file_type == "请选择...":
-        st.warning("⚠️ 请先选择要上传的文件类型（如：银行对账单、开户清单等）")
-    # 检查是否上传了文件
-    elif uploaded_file is None:
-        st.warning("⚠️ 请先上传需要处理的文件（仅支持 PDF/PNG/JPG/JPEG）")
-    else:
-        # 正常处理流程
-        with st.spinner("⏳ 正在处理中，请稍候..."):
-            import time
-            time.sleep(2)  # 模拟处理时间
-            
-            # 模拟提取的数据
-            mock_data = {
-                "bank_name": "中国工商银行北京朝阳支行",
-                "account_number": "6222020200123456789",
-                "ending_balance": 1250000.00,
-                "statement_period": "2025-12-01 至 2025-12-31",
-                "confidence": 0.87,
-                "validation": {
-                    "luhn_passed": True,
-                    "final_confidence": 0.87,
-                    "need_human_review": False
-                }
+# ==================== 检测与处理函数模块 ====================
+
+# ----- 1. 水印/印章/倾斜检测 -----
+def detect_watermark_seal(image_path: str) -> dict:
+    img = cv2.imread(image_path)
+    if img is None:
+        return {"has_watermark": False, "has_skew": False, "skew_angle": 0, 
+                "watermark_ratio": 0, "confidence": 0}
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    coords = np.column_stack(np.where(binary > 0))
+    has_skew = False
+    skew_angle = 0.0
+    if len(coords) > 100:
+        angle = cv2.minAreaRect(coords)[-1]
+        if angle < -45:
+            angle = -(90 + angle)
+        else:
+            angle = -angle
+        skew_angle = angle
+        has_skew = abs(angle) > 0.5
+    b, g, r = cv2.split(img)
+    red_mask = cv2.threshold(r, 150, 255, cv2.THRESH_BINARY)[1]
+    red_ratio = np.sum(red_mask > 0) / red_mask.size
+    edges = cv2.Canny(gray, 50, 150)
+    kernel = np.ones((3, 3), np.uint8)
+    closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+    watermark_ratio = np.sum(closed > 0) / closed.size
+    has_watermark = (red_ratio > 0.01) or (watermark_ratio > 0.05)
+    confidence = min(0.7 + (red_ratio * 5) + (watermark_ratio * 3), 0.99)
+    return {
+        "has_watermark": has_watermark,
+        "has_skew": has_skew,
+        "skew_angle": round(skew_angle, 2),
+        "watermark_ratio": round(watermark_ratio, 4),
+        "red_seal_ratio": round(red_ratio, 4),
+        "confidence": round(confidence, 2)
+    }
+
+def remove_watermark_and_seal(image_path: str, detection_result: dict = None) -> str:
+    img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError(f"无法读取图像: {image_path}")
+    if detection_result is None:
+        detection_result = detect_watermark_seal(image_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    binary = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                   cv2.THRESH_BINARY, 11, 2)
+    kernel = np.ones((2, 2), np.uint8)
+    cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+    if detection_result.get("has_watermark"):
+        b, g, r = cv2.split(img)
+        _, red_thresh = cv2.threshold(r, 150, 255, cv2.THRESH_BINARY)
+        cleaned[red_thresh > 0] = 255
+    if detection_result.get("has_skew"):
+        angle = detection_result.get("skew_angle", 0)
+        if abs(angle) > 0.5:
+            h, w = cleaned.shape[:2]
+            M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
+            cleaned = cv2.warpAffine(cleaned, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+        out_path = tmp.name
+    cv2.imwrite(out_path, cleaned)
+    return out_path
+
+
+# ----- 2. 生僻汉字检测 -----
+def detect_rare_chinese(text: str) -> dict:
+    common_cjk_pattern = re.compile(r'[\u4e00-\u9fa5]')
+    rare_cjk_ranges = [
+        (0x3400, 0x4DBF), (0x20000, 0x2A6DF), (0x2A700, 0x2B73F),
+        (0x2B740, 0x2B81F), (0x2B820, 0x2CEAF), (0x2CEB0, 0x2EBEF),
+    ]
+    rare_chars = []
+    total_chinese = 0
+    for char in text:
+        if common_cjk_pattern.match(char):
+            total_chinese += 1
+        else:
+            code = ord(char)
+            is_rare = any(start <= code <= end for start, end in rare_cjk_ranges)
+            if is_rare:
+                rare_chars.append(char)
+                total_chinese += 1
+    rare_ratio = len(rare_chars) / total_chinese if total_chinese > 0 else 0
+    return {
+        "has_rare_chars": len(rare_chars) > 0,
+        "rare_chars_list": list(set(rare_chars))[:20],
+        "rare_char_count": len(rare_chars),
+        "total_chinese_count": total_chinese,
+        "rare_ratio": round(rare_ratio, 4)
+    }
+
+
+# ----- 3. 中英文混排检测 -----
+def detect_mixed_language(text: str) -> dict:
+    chinese_pattern = re.compile(r'[\u4e00-\u9fff]')
+    english_pattern = re.compile(r'[a-zA-Z]')
+    has_chinese = bool(chinese_pattern.search(text))
+    has_english = bool(english_pattern.search(text))
+    lines = text.split('\n')
+    mixed_lines = []
+    for line in lines:
+        if chinese_pattern.search(line) and english_pattern.search(line):
+            mixed_lines.append(line[:50])
+    return {
+        "has_mixed": has_chinese and has_english,
+        "mixed_line_count": len(mixed_lines),
+        "mixed_line_examples": mixed_lines[:5],
+        "chinese_char_count": len(chinese_pattern.findall(text)),
+        "english_word_count": len(english_pattern.findall(text))
+    }
+
+
+# ----- 4. 跨页表格检测 -----
+def detect_cross_page_table(pdf_path: str) -> dict:
+    try:
+        import pdfplumber
+        with pdfplumber.open(pdf_path) as pdf:
+            pages = len(pdf.pages)
+            tables_per_page = []
+            for page in pdf.pages:
+                tables = page.extract_tables()
+                tables_per_page.append(len(tables))
+            cross_pages = []
+            for i in range(pages - 1):
+                if tables_per_page[i] > 0 and tables_per_page[i+1] > 0:
+                    cross_pages.append(f"第{i+1}页 → 第{i+2}页")
+            return {
+                "has_cross_page": len(cross_pages) > 0,
+                "total_pages": pages,
+                "pages_with_tables": sum(1 for t in tables_per_page if t > 0),
+                "cross_page_pairs": cross_pages
             }
-            
-            # 根据文件类型调整模拟数据
-            if "开户清单" in file_type:
-                mock_data["document_type"] = "开户清单"
-                mock_data["accounts"] = [
-                    {"bank": "工商银行", "account": "6222****1234", "status": "正常"},
-                    {"bank": "建设银行", "account": "6227****5678", "status": "正常"},
-                ]
-            elif "信用报告" in file_type:
-                mock_data["document_type"] = "企业信用报告"
-                mock_data["loans"] = [{"bank": "中国银行", "amount": 5000000, "status": "正常"}]
-            elif "询证函" in file_type:
-                mock_data["document_type"] = "银行询证函"
-                mock_data["函证项目"] = {"存款": 1250000.00, "借款": 0, "担保": "无"}
-            elif "调节表" in file_type:
-                mock_data["document_type"] = "余额调节表"
-                mock_data["book_balance"] = 1270000.00
-                mock_data["difference"] = -20000.00
-            elif "销户" in file_type:
-                mock_data["document_type"] = "销户证明"
-                mock_data["close_date"] = "2025-12-15"
-                mock_data["close_balance"] = 0.00
-            
-            st.session_state['processed_data'] = mock_data
-            st.session_state['processing_done'] = True
+    except:
+        return {"has_cross_page": False, "total_pages": 0, "pages_with_tables": 0, "cross_page_pairs": []}
+
+
+# ----- 5. 大模型调用（字段抽取与风险分析）-----
+def call_llm_for_extraction(text: str, file_type: str) -> dict:
+    """
+    调用大模型进行语义理解和字段抽取
+    支持两种模式：
+    1. 本地Ollama（推荐，免费）
+    2. 云端API（SiliconFlow/DeepSeek等）
+    """
+    # 构建提示词
+    prompt = f"""
+你是一个专业的审计资料信息提取专家。请从以下OCR识别出的文本中，提取关键信息。
+
+文件类型：{file_type}
+
+文本内容：
+{text[:3000]}
+
+请以严格的JSON格式返回以下字段：
+{{
+    "bank_name": "银行全称（如中国工商银行北京分行）",
+    "account_number": "完整银行账号",
+    "ending_balance": 期末余额数字（纯数字，如1250000.00）,
+    "statement_period": "对账单期间（如2025-12-01至2025-12-31）",
+    "currency": "币种（如RMB/USD）",
+    "confidence": 0.0到1.0之间的置信度,
+    "risk_notes": "简要风险提示（如有异常交易或未达账项）"
+}}
+
+如果某字段无法识别，填写null。只返回JSON，不要其他内容。
+"""
+    
+    # === 方式1：使用本地Ollama（需要先安装并拉取模型）===
+    try:
+        import requests
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "qwen3:4b",  # 或 llava:7b 等
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=30
+        )
+        if response.status_code == 200:
+            result_text = response.json().get("response", "")
+            # 提取JSON
+            json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+    except:
+        pass
+    
+    # === 方式2：使用云端API（SiliconFlow示例）===
+    # 请替换为您的API Key
+    SILICONFLOW_API_KEY = os.environ.get("SILICONFLOW_API_KEY", "")
+    if SILICONFLOW_API_KEY:
+        try:
+            import requests
+            response = requests.post(
+                "https://api.siliconflow.cn/v1/chat/completions",
+                headers={"Authorization": f"Bearer {SILICONFLOW_API_KEY}"},
+                json={
+                    "model": "Qwen/Qwen2.5-7B-Instruct",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1
+                },
+                timeout=30
+            )
+            if response.status_code == 200:
+                result_text = response.json()["choices"][0]["message"]["content"]
+                json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
+                if json_match:
+                    return json.loads(json_match.group())
+        except:
+            pass
+    
+    # === 降级方案：基于正则的简单抽取 ===
+    return fallback_extraction(text)
+
+
+def fallback_extraction(text: str) -> dict:
+    """当大模型不可用时的正则降级方案"""
+    data = {"bank_name": None, "account_number": None, "ending_balance": None,
+            "statement_period": None, "currency": "RMB", "confidence": 0.5, "risk_notes": ""}
+    
+    # 银行名称
+    patterns = [
+        r"(中国[a-zA-Z]*银行)", r"([a-zA-Z]*银行.*?支行)",
+        r"(工商银行|农业银行|中国银行|建设银行|交通银行|招商银行)",
+        r"(ICBC|BOC|CCB|ABC|CMB)"
+    ]
+    for p in patterns:
+        m = re.search(p, text, re.I)
+        if m:
+            data["bank_name"] = m.group(1)
+            data["confidence"] += 0.2
+            break
+    
+    # 账号
+    m = re.search(r"(?:账号|帐户|账户|Account|A/C)[:\s]*(\d{12,19})", text, re.I)
+    if not m:
+        m = re.search(r"\b(\d{16,19})\b", text)
+    if m:
+        data["account_number"] = m.group(1)
+        data["confidence"] += 0.2
+    
+    # 余额
+    m = re.search(r"(?:余额|Balance|期末余额)[:\s]*[¥$]?\s*([\d,]+\.?\d*)", text, re.I)
+    if m:
+        try:
+            data["ending_balance"] = float(m.group(1).replace(",", ""))
+            data["confidence"] += 0.2
+        except:
+            pass
+    
+    # 期间
+    m = re.search(r"(?:期间|Period|对账期间)[:\s]*(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日]?(?:\s*[-~至]\s*\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日]?)?)", text)
+    if m:
+        data["statement_period"] = m.group(1)
+        data["confidence"] += 0.2
+    
+    data["confidence"] = min(data["confidence"], 0.9)
+    return data
+
+
+# ==================== 主处理流程 ====================
+if process_clicked:
+    if file_type == "请选择..." or uploaded_file is None:
+        st.warning("⚠️ 请先选择文件类型并上传文件")
+    else:
+        # 保存上传文件
+        suffix = os.path.splitext(uploaded_file.name)[1]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(uploaded_file.getvalue())
+            temp_input_path = tmp.name
         
-        st.success("✅ 处理完成！")
-        # st.balloons()   # 已移除气球，保持专业
-
-
-# -------------------- 结果展示 --------------------
-if 'processing_done' in st.session_state and st.session_state['processing_done']:
-    data = st.session_state['processed_data']
-    
-    st.divider()
-    st.markdown("### 📊 提取结果")
-    
-    with st.container():
+        # ---------- 步骤1：水印/印章/倾斜检测 ----------
+        st.markdown("---")
+        st.markdown("### 💧 步骤1：水印/印章/倾斜检测")
+        
+        detection = detect_watermark_seal(temp_input_path)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("水印/印章", "⚠️ 检测到" if detection["has_watermark"] else "✅ 未检测到")
+        with col2:
+            st.metric("图像倾斜", f"{detection['skew_angle']}°" if detection["has_skew"] else "✅ 无倾斜")
+        with col3:
+            st.metric("检测置信度", f"{detection['confidence']*100:.0f}%")
+        
+        if detection["has_watermark"] or detection["has_skew"]:
+            st.info(f"🔔 检测到问题，正在调用净化模块...")
+            with st.spinner("⏳ 正在去除水印/印章并矫正倾斜..."):
+                cleaned_path = remove_watermark_and_seal(temp_input_path, detection)
+                st.session_state['cleaned_image'] = cleaned_path
+                st.success("✅ 图像净化完成！")
+            col_before, col_after = st.columns(2)
+            with col_before:
+                st.image(temp_input_path, caption="原始图像", use_container_width=True)
+            with col_after:
+                st.image(cleaned_path, caption="净化后", use_container_width=True)
+        else:
+            st.success("✅ 未检测到水印/印章/倾斜，跳过净化步骤")
+            st.session_state['cleaned_image'] = temp_input_path
+        
+        current_image = st.session_state.get('cleaned_image', temp_input_path)
+        
+        # ---------- OCR提取原始文本 ----------
+        raw_text = ""
+        try:
+            from paddleocr import PaddleOCR
+            ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
+            ocr_result = ocr.ocr(current_image, cls=True)
+            if ocr_result and ocr_result[0]:
+                raw_text = "\n".join([line[1][0] for line in ocr_result[0] if line])
+        except Exception as e:
+            st.warning(f"OCR识别遇到问题: {e}，将使用模拟文本进行演示")
+            raw_text = "中国工商银行北京朝阳支行\n账号：6222020200123456789\n期末余额：1,250,000.00\n对账期间：2025-12-01至2025-12-31"
+        
+        # ---------- 步骤2：生僻汉字检测 ----------
+        st.markdown("---")
+        st.markdown("### 🀄️ 步骤2：生僻汉字检测")
+        
+        rare_detection = detect_rare_chinese(raw_text)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("生僻字", f"{rare_detection['rare_char_count']} 个" if rare_detection["has_rare_chars"] else "✅ 未检测到")
+        with col2:
+            st.metric("中文总字数", rare_detection['total_chinese_count'])
+        with col3:
+            st.metric("生僻字占比", f"{rare_detection['rare_ratio']*100:.2f}%")
+        
+        if rare_detection["has_rare_chars"]:
+            st.info(f"🔔 检测到生僻汉字：{', '.join(rare_detection['rare_chars_list'][:10])}")
+        
+        # ---------- 步骤3：中英文混排检测 ----------
+        st.markdown("---")
+        st.markdown("### 🌐 步骤3：中英文混排检测")
+        
+        mixed_detection = detect_mixed_language(raw_text)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("中英文混排", f"{mixed_detection['mixed_line_count']} 行" if mixed_detection["has_mixed"] else "✅ 未检测到")
+        with col2:
+            st.metric("中文字符", mixed_detection['chinese_char_count'])
+        with col3:
+            st.metric("英文字符", mixed_detection['english_word_count'])
+        
+        # ---------- 步骤4：跨页表格检测（仅PDF） ----------
+        if suffix == '.pdf':
+            st.markdown("---")
+            st.markdown("### 📄 步骤4：跨页表格检测")
+            cross_detection = detect_cross_page_table(temp_input_path)
+            st.metric("跨页表格", f"{len(cross_detection['cross_page_pairs'])} 处" if cross_detection["has_cross_page"] else "✅ 未检测到")
+            if cross_detection["has_cross_page"]:
+                st.info(f"🔔 检测到跨页表格：{', '.join(cross_detection['cross_page_pairs'])}")
+        
+        # ---------- 步骤5：大模型字段抽取 ----------
+        st.markdown("---")
+        st.markdown("### 🤖 步骤5：大模型语义理解与字段抽取")
+        
+        with st.spinner("⏳ 正在调用大模型进行精准抽取..."):
+            extracted_data = call_llm_for_extraction(raw_text, file_type)
+        
+        # 展示抽取结果
         st.markdown('<div class="result-card">', unsafe_allow_html=True)
-        
-        # 第一行：核心指标
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            bank_name = data.get("bank_name", "未识别")
-            display_name = bank_name[:15] + "..." if len(bank_name) > 15 else bank_name
-            st.metric("🏦 银行名称", display_name)
+            st.metric("🏦 银行名称", extracted_data.get("bank_name") or "未识别")
         with c2:
-            st.metric("💳 账号", data.get("account_number", "未识别"))
+            st.metric("💳 账号", extracted_data.get("account_number") or "未识别")
         with c3:
-            bal = data.get("ending_balance")
+            bal = extracted_data.get("ending_balance")
             st.metric("💰 期末余额", f"¥ {bal:,.2f}" if bal else "未识别")
         with c4:
-            conf = data.get("confidence", 0)
-            st.metric("📈 置信度", f"{conf*100:.0f}%")
+            st.metric("📈 置信度", f"{extracted_data.get('confidence', 0)*100:.0f}%")
         
-        # 第二行：校验状态
-        st.markdown("#### 🔍 校验结果")
-        status_cols = st.columns(3)
-        with status_cols[0]:
-            if data.get("validation", {}).get("luhn_passed"):
-                st.success("✅ Luhn校验通过")
-            else:
-                st.error("❌ Luhn校验失败")
-        with status_cols[1]:
-            final_conf = data.get("validation", {}).get("final_confidence", 0)
-            if final_conf >= 0.7:
-                st.success(f"✅ 置信度 {final_conf*100:.0f}%")
-            else:
-                st.warning(f"⚠️ 置信度 {final_conf*100:.0f}%，建议人工复核")
-        with status_cols[2]:
-            st.info(f"📅 {data.get('statement_period', '未识别期间')}")
-        
+        if extracted_data.get("risk_notes"):
+            st.info(f"📋 风险提示：{extracted_data['risk_notes']}")
         st.markdown('</div>', unsafe_allow_html=True)
-    
-    # 额外信息（根据文件类型展示）
-    if data.get("document_type"):
-        with st.expander("📄 查看详细提取内容", expanded=False):
-            st.json(data)
-    
-    # 下载按钮
-    st.divider()
-    st.markdown("### 📥 下载")
-    
-    dl_col1, dl_col2, dl_col3 = st.columns(3)
-    with dl_col1:
-        json_str = json.dumps(data, ensure_ascii=False, indent=2)
-        st.download_button(
-            label="📊 下载Excel底稿（模拟）",
-            data=json_str,
-            file_name=f"AuditFlow_{data.get('bank_name', 'result')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-            mime="application/json",
-            use_container_width=True,
-            help="云端演示版输出JSON格式，本地部署可生成真实Excel"
-        )
-    with dl_col2:
+        
+        # ---------- 下载JSON ----------
+        st.markdown("### 📥 下载结果")
+        json_str = json.dumps(extracted_data, ensure_ascii=False, indent=2)
         st.download_button(
             label="📄 下载JSON数据",
             data=json_str,
-            file_name=f"extracted_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            file_name=f"AuditFlow_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json",
             use_container_width=True
         )
-    with dl_col3:
-        if uploaded_file is not None:
-            st.download_button(
-                label="📎 重新下载源文件",
-                data=uploaded_file.getvalue(),
-                file_name=uploaded_file.name,
-                mime=uploaded_file.type,
-                use_container_width=True
-            )
-
-
-# -------------------- 未处理时的引导页 --------------------
-elif 'processing_done' not in st.session_state:
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    
-    st.markdown("### 💡 快速体验")
-    st.markdown("*点击下方按钮，使用内置示例银行对账单立即体验完整流程*")
-    
-    col_demo1, col_demo2, col_demo3 = st.columns([1, 1, 1])
-    with col_demo2:
-        if st.button("🎯 使用示例文件演示", use_container_width=True):
-            with st.spinner("正在处理示例文件..."):
-                import time
-                time.sleep(1.5)
-                
-                demo_data = {
-                    "bank_name": "中国建设银行上海浦东支行",
-                    "account_number": "6227001234567890",
-                    "ending_balance": 3580000.50,
-                    "statement_period": "2025-11-01 至 2025-11-30",
-                    "confidence": 0.92,
-                    "validation": {
-                        "luhn_passed": True,
-                        "final_confidence": 0.92,
-                        "need_human_review": False
-                    },
-                    "extracted_transactions": 47,
-                    "risk_notes": "未发现异常大额交易，余额与账面一致。"
-                }
-                st.session_state['processed_data'] = demo_data
-                st.session_state['processing_done'] = True
-                st.rerun()
-
 
 # -------------------- 页脚 --------------------
 st.divider()
 st.caption("🌊 AuditFlow — 让审计数据自动流动 | 德勤数字化精英挑战赛 Team J")
-st.caption("⚠️ 云端演示版使用模拟数据，展示完整交互流程。本地部署可接入真实OCR引擎。")
+st.caption("💡 大模型接入说明：默认使用本地Ollama（需安装并运行），或配置云端API密钥")
