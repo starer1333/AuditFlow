@@ -8,16 +8,13 @@ import os
 import tempfile
 from datetime import datetime
 
+sys.path.insert(0, os.path.dirname(__file__))
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "AuditMind"))
-
-# 导入您已有的功能模块（根据实际文件名调整）
-from modules.file_handler import FileHandler
-from modules.image_cleaner import ImageCleaner
-from modules.ocr_engine import OCREngine
-from modules.llm_extractor import LLMExtractor
-from modules.data_validator import DataValidator
-from modules.excel_writer import ExcelWriter
+# 导入您的功能模块（根据实际文件名）
+import format_and_clean
+import ocr_extract
+import validate_and_map
+import generate_report
 # -------------------- 页面配置 --------------------
 st.set_page_config(
     page_title="AuditFlow — 审计数据中枢",
