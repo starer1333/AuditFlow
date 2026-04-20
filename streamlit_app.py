@@ -102,7 +102,7 @@ with st.expander("📖 我们的故事：从凌晨三点的审计师说起", exp
     st.markdown("""
     <div class="story-box">
         <p class="quote-text">“凌晨三点，我揉了揉发酸的眼睛。面前是几百页带水印的银行对账单、开户清单、信用报告……格式五花八门，数据散落在各处。这个月底的审计报告，又是一场和时间的赛跑。我多么希望，能有一个数字化大脑帮我处理这些重复劳动，让我专注于真正重要的专业判断。”</p>
-        <p style="text-align: right; margin-top: 1rem;">—— <span class="auditor-name">一位四大审计师</span> 的自白</p>
+        <p style="text-align: right; margin-top: 1rem;">—— <span class="auditor-name">————一位四大审计师的自白</span> 的自白</p>
     </div>
     """, unsafe_allow_html=True)
 
