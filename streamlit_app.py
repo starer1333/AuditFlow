@@ -7,7 +7,6 @@ AuditFlow — 审计数据中枢（完整商赛版）
 import streamlit as st
 import requests
 import base64
-import pdfplumber
 import json
 import io
 import re
@@ -315,13 +314,13 @@ with st.expander("📝 审计意见参考库（系统内置范例，可编辑）
     )
 
 
-        if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
-         with st.spinner("⏳ 正在调用多模态大模型分析..."):
+    if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
+        with st.spinner("⏳ 正在调用多模态大模型分析..."):
             # 将图片转为 base64
             img_bytes = uploaded_file.getvalue()
             img_b64 = base64.b64encode(img_bytes).decode()
 
-            # 构建 Prompt（一次性完成五大痛点检测 + 字段提取 + 风险意见）
+            # 构建 Prompt
             prompt = f"""你是一名资深注册会计师（CPA），拥有多年四大会计师事务所审计经验。请根据用户上传的图片内容，完成专业判断。
 
 **用户选择的文件类型**：{file_type}
@@ -354,7 +353,9 @@ with st.expander("📝 审计意见参考库（系统内置范例，可编辑）
    - 识别可能存在的审计风险（如大额异常交易、长期未达账项、关联方交易集中等）
    - 给出下一步审计建议
 
-请用专业的审计术语作答，保持客观、严谨的风格。先用文字回答1、3、4、5，最后输出JSON。"""
+请用专业的审计术语作答，保持客观、严谨的风格。先用文字回答1、3、4、5，最后输出JSON。
+{f"**审计意见参考范例**：{audit_opinion_reference}" if audit_opinion_reference else ""}
+"""
 
             headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
             payload = {
@@ -388,24 +389,24 @@ with st.expander("📝 审计意见参考库（系统内置范例，可编辑）
             else:
                 extracted = {"bank_name": "未识别", "raw": llm_response[:500]}
 
-            # 文字分析部分（1-4题的回答）
+            # 文字分析部分
             text_analysis = llm_response[:llm_response.find('{')] if '{' in llm_response else llm_response
-            
-            # ---------- 校验文件类型与财务相关性 ----------
+
+            # 校验文件类型与财务相关性（使用开头的函数）
             validation = validate_file_type_and_content(llm_response, file_type)
             if validation["error"]:
                 st.error(validation["error"])
                 st.stop()
             if validation["warning"]:
                 st.warning(validation["warning"])
-            
-            # ---------- 展示分析报告 ----------
+
+            # 展示分析报告
             st.markdown("---")
             st.markdown("### 🤖 大模型分析报告")
             with st.expander("📋 查看详细分析（水印/生僻字/混排/表格）", expanded=True):
                 st.markdown(text_analysis)
 
-            # ---------- 展示提取字段 ----------
+            # 展示提取字段
             st.markdown("### 📊 提取的关键字段")
             c1, c2, c3, c4 = st.columns(4)
             with c1:
@@ -419,6 +420,27 @@ with st.expander("📝 审计意见参考库（系统内置范例，可编辑）
                 st.metric("📈 置信度", f"{extracted.get('confidence', 0)*100:.0f}%")
             if extracted.get("risk_notes"):
                 st.info(f"📋 审计意见：{extracted['risk_notes']}")
+
+            # 生成 Excel 底稿
+            st.markdown("### 📥 下载审计底稿")
+            # 注意：generate_excel_by_type 函数已在上文定义，直接调用
+            excel_bytes = generate_excel_by_type(extracted, file_type)
+
+            st.download_button(
+                label="📊 下载 Excel 底稿",
+                data=excel_bytes,
+                file_name=f"{file_type.strip('🏦📋❌📊📬⚖️ ')}底稿_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+            st.download_button(
+                label="📄 下载完整报告 (JSON)",
+                data=json.dumps({"analysis": text_analysis, "extracted": extracted}, ensure_ascii=False, indent=2),
+                file_name=f"AuditFlow_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
 
                         # ---------- 生成 Excel 底稿 ----------
             st.markdown("### 📥 下载审计底稿")
@@ -697,7 +719,6 @@ with st.expander("🔒 数据安全与隐私保护", expanded=False):
     </div>
     """, unsafe_allow_html=True)
 
-st.divider()
 # -------------------- 页脚品牌语 --------------------
 st.divider()
 st.markdown("""
