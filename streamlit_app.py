@@ -534,40 +534,40 @@ if uploaded_file:
 
             # 提取 JSON 部分
             json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
-if json_match:
-    try:
-        raw_extracted = json.loads(json_match.group())
-        
-        bank_name = raw_extracted.get("bank_name") or raw_extracted.get("bank") or raw_extracted.get("银行名称")
-        account_number = raw_extracted.get("account_number") or raw_extracted.get("account") or raw_extracted.get("账号")
-        ending_balance = raw_extracted.get("ending_balance") or raw_extracted.get("balance") or raw_extracted.get("期末余额")
-        statement_period = raw_extracted.get("statement_period") or raw_extracted.get("period") or raw_extracted.get("期间")
-        currency = raw_extracted.get("currency", "RMB")
-        confidence = raw_extracted.get("confidence", 0.5)
-        risk_notes = raw_extracted.get("risk_notes") or raw_extracted.get("审计意见") or raw_extracted.get("opinion")
+            if json_match:
+                try:
+                    raw_extracted = json.loads(json_match.group())
+                    
+                    bank_name = raw_extracted.get("bank_name") or raw_extracted.get("bank") or raw_extracted.get("银行名称")
+                    account_number = raw_extracted.get("account_number") or raw_extracted.get("account") or raw_extracted.get("账号")
+                    ending_balance = raw_extracted.get("ending_balance") or raw_extracted.get("balance") or raw_extracted.get("期末余额")
+                    statement_period = raw_extracted.get("statement_period") or raw_extracted.get("period") or raw_extracted.get("期间")
+                    currency = raw_extracted.get("currency", "RMB")
+                    confidence = raw_extracted.get("confidence", 0.5)
+                    risk_notes = raw_extracted.get("risk_notes") or raw_extracted.get("审计意见") or raw_extracted.get("opinion")
 
-        if not risk_notes:
-            if ending_balance is not None:
-                if ending_balance < 0:
-                    risk_notes = "期末余额为负数，存在透支或异常交易风险，建议进一步核实。"
-                else:
-                    risk_notes = "基于已执行的程序，未发现重大异常，银行存款余额可确认。"
+                    if not risk_notes:
+                        if ending_balance is not None:
+                            if ending_balance < 0:
+                                risk_notes = "期末余额为负数，存在透支或异常交易风险，建议进一步核实。"
+                            else:
+                                risk_notes = "基于已执行的程序，未发现重大异常，银行存款余额可确认。"
+                        else:
+                            risk_notes = "未能提取到期末余额，请人工复核原始文件。"
+
+                    extracted = {
+                        "bank_name": bank_name,
+                        "account_number": account_number,
+                        "ending_balance": ending_balance,
+                        "statement_period": statement_period,
+                        "currency": currency,
+                        "confidence": confidence,
+                        "risk_notes": risk_notes
+                    }
+                except:
+                    extracted = {"bank_name": "解析失败", "error": "JSON格式错误"}
             else:
-                risk_notes = "未能提取到期末余额，请人工复核原始文件。"
-
-        extracted = {
-            "bank_name": bank_name,
-            "account_number": account_number,
-            "ending_balance": ending_balance,
-            "statement_period": statement_period,
-            "currency": currency,
-            "confidence": confidence,
-            "risk_notes": risk_notes
-        }
-    except:
-        extracted = {"bank_name": "解析失败", "error": "JSON格式错误"}
-else:
-    extracted = {"bank_name": "未识别", "raw": llm_response[:500]}
+                extracted = {"bank_name": "未识别", "raw": llm_response[:500]}
 
             # 文字分析部分
             text_analysis = llm_response[:llm_response.find('{')] if '{' in llm_response else llm_response
@@ -598,11 +598,13 @@ else:
                 st.metric("💰 期末余额", f"¥ {bal:,.2f}" if isinstance(bal, (int, float)) else "未识别")
             with c4:
                 st.metric("📈 置信度", f"{extracted.get('confidence', 0)*100:.0f}%")
+
+            # 审计意见展示
             if extracted.get("risk_notes"):
-    st.markdown("### 📋 审计意见")
-    st.info(extracted["risk_notes"])
-else:
-    st.warning("⚠️ 大模型未返回审计意见，请参考提取数据自行判断。")
+                st.markdown("### 📋 审计意见")
+                st.info(extracted["risk_notes"])
+            else:
+                st.warning("⚠️ 大模型未返回审计意见，请参考提取数据自行判断。")
 
             # 生成 Excel 底稿
             st.markdown("### 📥 下载审计底稿")
