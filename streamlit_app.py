@@ -494,9 +494,6 @@ if uploaded_file:
                 temp_input_path = tmp.name
 
             ocr_text = ""
-
-           if uploaded_file:
-    # ... (您原有的文件保存和类型判断逻辑)
     
     if PADDLE_OCR_AVAILABLE:
         # 本地OCR处理 (使用 ppocr-lite)
