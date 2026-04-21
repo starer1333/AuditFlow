@@ -34,6 +34,31 @@ except ImportError:
     pass  # 云端环境，降级为调用多模态大模型
 
 # ==================== 全局辅助函数 ====================
+def parse_deepseek_ocr_response(raw_response: str) -> str:
+    """
+    解析 DeepSeek-OCR 的返回内容，提取 Markdown 表格并转换为易读文本。
+    """
+    import re
+    
+    # 提取所有 Markdown 表格
+    table_pattern = r'<table>(.*?)</table>'
+    tables = re.findall(table_pattern, raw_response, re.DOTALL)
+    
+    if tables:
+        # 有表格：返回第一个表格的 Markdown 格式（或合并所有表格）
+        markdown_table = tables[0].strip()
+        # 简单清洗：去除 HTML 标签，保留 Markdown 分隔符
+        markdown_table = re.sub(r'</?table>', '', markdown_table)
+        return f"[表格内容]\n{markdown_table}"
+    else:
+        # 无表格：提取所有 <|ref|>text 内容
+        text_pattern = r'<\|ref\|>text<\|/ref\|><\|det\|>\[[^\]]*\]<\|/det\|>\s*([^<]+)'
+        texts = re.findall(text_pattern, raw_response, re.DOTALL)
+        if texts:
+            return "\n".join([t.strip() for t in texts if t.strip()])
+        else:
+            # 降级：返回原始响应的前 500 字符
+            return raw_response[:500]
 
 def validate_file_type_and_content(llm_response, selected_type):
     """校验上传文件与所选类型是否一致，以及是否为财务相关文件"""
@@ -548,7 +573,8 @@ if uploaded_file:
             if not ocr_text:
                 st.error("❌ 未能识别到任何文本，请检查图片质量。")
                 st.stop()
-
+            # 解析 DeepSeek-OCR 的结构化输出，提取可读内容
+            parsed_ocr_text = parse_deepseek_ocr_response(ocr_text)
             st.markdown("### 🔍 识别的原始文本")
             st.text_area("提取的文本", ocr_text, height=200)
 
@@ -559,7 +585,7 @@ if uploaded_file:
 **用户选择的文件类型**：{file_type}
 
 **OCR 提取的文本内容**：
-{ocr_text[:3000]}
+{parsed_ocr_text[:3000]}
 
 请仔细观察文本内容，完成以下任务：
 
