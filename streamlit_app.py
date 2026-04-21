@@ -744,10 +744,6 @@ if uploaded_file:
                 "confidence": confidence,
                 "risk_notes": risk_notes
             }
-                except:
-                    extracted = {"bank_name": "解析失败", "error": "JSON 格式错误"}
-            else:
-                extracted = {"bank_name": "未识别", "raw": llm_response[:500]}
 
             # 文字分析部分
             text_analysis = llm_response[:llm_response.find('{')] if '{' in llm_response else llm_response
