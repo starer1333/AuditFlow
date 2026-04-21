@@ -534,42 +534,40 @@ if uploaded_file:
 
             # 提取 JSON 部分
             json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
-            if json_match:
-                try:
-                    raw_extracted = json.loads(json_match.group())
+if json_match:
+    try:
+        raw_extracted = json.loads(json_match.group())
+        
+        bank_name = raw_extracted.get("bank_name") or raw_extracted.get("bank") or raw_extracted.get("银行名称")
+        account_number = raw_extracted.get("account_number") or raw_extracted.get("account") or raw_extracted.get("账号")
+        ending_balance = raw_extracted.get("ending_balance") or raw_extracted.get("balance") or raw_extracted.get("期末余额")
+        statement_period = raw_extracted.get("statement_period") or raw_extracted.get("period") or raw_extracted.get("期间")
+        currency = raw_extracted.get("currency", "RMB")
+        confidence = raw_extracted.get("confidence", 0.5)
+        risk_notes = raw_extracted.get("risk_notes") or raw_extracted.get("审计意见") or raw_extracted.get("opinion")
 
-# 字段名兼容：大模型可能返回不同的 key
-bank_name = raw_extracted.get("bank_name") or raw_extracted.get("bank") or raw_extracted.get("银行名称")
-account_number = raw_extracted.get("account_number") or raw_extracted.get("account") or raw_extracted.get("账号")
-ending_balance = raw_extracted.get("ending_balance") or raw_extracted.get("balance") or raw_extracted.get("期末余额")
-statement_period = raw_extracted.get("statement_period") or raw_extracted.get("period") or raw_extracted.get("期间")
-currency = raw_extracted.get("currency", "RMB")
-confidence = raw_extracted.get("confidence", 0.5)
-risk_notes = raw_extracted.get("risk_notes") or raw_extracted.get("审计意见") or raw_extracted.get("opinion")
-
-# 如果大模型没有返回审计意见，生成兜底意见
-if not risk_notes:
-    if ending_balance is not None:
-        if ending_balance < 0:
-            risk_notes = "期末余额为负数，存在透支或异常交易风险，建议进一步核实。"
-        else:
-            risk_notes = "基于已执行的程序，未发现重大异常，银行存款余额可确认。"
-    else:
-        risk_notes = "未能提取到期末余额，请人工复核原始文件。"
-
-extracted = {
-    "bank_name": bank_name,
-    "account_number": account_number,
-    "ending_balance": ending_balance,
-    "statement_period": statement_period,
-    "currency": currency,
-    "confidence": confidence,
-    "risk_notes": risk_notes
-}
-                except:
-                    extracted = {"bank_name": "解析失败", "error": "JSON格式错误"}
+        if not risk_notes:
+            if ending_balance is not None:
+                if ending_balance < 0:
+                    risk_notes = "期末余额为负数，存在透支或异常交易风险，建议进一步核实。"
+                else:
+                    risk_notes = "基于已执行的程序，未发现重大异常，银行存款余额可确认。"
             else:
-                extracted = {"bank_name": "未识别", "raw": llm_response[:500]}
+                risk_notes = "未能提取到期末余额，请人工复核原始文件。"
+
+        extracted = {
+            "bank_name": bank_name,
+            "account_number": account_number,
+            "ending_balance": ending_balance,
+            "statement_period": statement_period,
+            "currency": currency,
+            "confidence": confidence,
+            "risk_notes": risk_notes
+        }
+    except:
+        extracted = {"bank_name": "解析失败", "error": "JSON格式错误"}
+else:
+    extracted = {"bank_name": "未识别", "raw": llm_response[:500]}
 
             # 文字分析部分
             text_analysis = llm_response[:llm_response.find('{')] if '{' in llm_response else llm_response
