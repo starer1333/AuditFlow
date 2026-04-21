@@ -496,80 +496,56 @@ if uploaded_file:
             ocr_text = ""
     
     if PADDLE_OCR_AVAILABLE:
-        # 本地OCR处理 (使用 ppocr-lite)
-        with st.spinner("⏳ 正在使用本地OCR提取文本..."):
-            # PDF 转图片
-            if suffix.lower() == '.pdf':
-                images = convert_from_path(temp_input_path, dpi=200)
-                work_image_path = os.path.join(tempfile.gettempdir(), "pdf_page_1.png")
-                images[0].save(work_image_path, "PNG")
-            else:
-                work_image_path = temp_input_path
+    # 本地OCR处理 (使用 ppocr-lite)
+    with st.spinner("⏳ 正在使用本地OCR提取文本..."):
+        # PDF 转图片
+        if suffix.lower() == '.pdf':
+            images = convert_from_path(temp_input_path, dpi=200)
+            work_image_path = os.path.join(tempfile.gettempdir(), "pdf_page_1.png")
+            images[0].save(work_image_path, "PNG")
+        else:
+            work_image_path = temp_input_path
 
-            ocr = init_ocr()
-            result = ocr.run(work_image_path)
-            ocr_text = "\n".join([line.text for line in result])
-    else:
-        # 云端降级：调用多模态大模型直接OCR
-        with st.spinner("⏳ 正在调用云端大模型提取文本..."):
-            img_bytes = uploaded_file.getvalue()
-            img_b64 = base64.b64encode(img_bytes).decode()
-            
-            headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
-            payload = {
-                "model": SILICONFLOW_MODEL,
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "请提取图片中的所有文字，只输出文字内容，不要添加任何解释。"},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
-                    ]
-                }],
-                "temperature": 0.1,
-                "max_tokens": 2048
-            }
-            resp = requests.post("https://api.siliconflow.cn/v1/chat/completions", headers=headers, json=payload, timeout=60)
-            if resp.status_code == 200:
-                ocr_text = resp.json()["choices"][0]["message"]["content"]
-            else:
-                st.error(f"OCR识别失败: {resp.text}")
-                st.stop()
-
-    # 确保ocr_text有内容
-    if not ocr_text:
-        st.error("❌ 未能识别到任何文本，请检查图片质量。")
-        st.stop()
-
-    # ... (后续您将 ocr_text 传给大模型分析等操作)
+        ocr = init_ocr()
+        result = ocr.run(work_image_path)
+        ocr_text = "\n".join([line.text for line in result])
+else:
+    # 云端降级：调用多模态大模型直接OCR
+    with st.spinner("⏳ 正在调用云端大模型提取文本..."):
+        img_bytes = uploaded_file.getvalue()
+        img_b64 = base64.b64encode(img_bytes).decode()
+        
         ocr_prompt = """请仔细观察这张图片，提取图片中的所有文字内容。
 要求：
 1. 只输出从图片中识别到的原文，不要添加任何解释
 2. 保留原文的换行和格式
 3. 如果是银行对账单，务必完整提取银行名称、账号、交易明细、余额等信息"""
-                headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
-                payload = {
-                    "model": SILICONFLOW_MODEL,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": ocr_prompt},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
-                        ]
-                    }],
-                    "temperature": 0.1,
-                    "max_tokens": 2048
-                }
-                try:
-                    resp = requests.post("https://api.siliconflow.cn/v1/chat/completions", headers=headers, json=payload, timeout=60)
-                    resp.raise_for_status()
-                    ocr_text = resp.json()["choices"][0]["message"]["content"]
-                except Exception as e:
-                    st.error(f"OCR 识别失败：{e}")
-                    st.stop()
+        
+        headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
+        payload = {
+            "model": SILICONFLOW_MODEL,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": ocr_prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                ]
+            }],
+            "temperature": 0.1,
+            "max_tokens": 2048
+        }
+        try:
+            resp = requests.post("https://api.siliconflow.cn/v1/chat/completions", headers=headers, json=payload, timeout=60)
+            resp.raise_for_status()
+            ocr_text = resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            st.error(f"OCR识别失败: {e}")
+            st.stop()
 
-            if not ocr_text:
-                st.error("❌ 未能识别到任何文本，请检查图片质量。")
-                st.stop()
+# 确保ocr_text有内容
+if not ocr_text:
+    st.error("❌ 未能识别到任何文本，请检查图片质量。")
+    st.stop()
 
             st.markdown("### 🔍 识别的原始文本")
             st.text_area("提取的文本", ocr_text, height=200)
