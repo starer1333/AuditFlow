@@ -576,7 +576,7 @@ if uploaded_file:
             # 解析 DeepSeek-OCR 的结构化输出，提取可读内容
             parsed_ocr_text = parse_deepseek_ocr_response(ocr_text)
             st.markdown("### 🔍 识别的原始文本")
-            st.text_area("提取的文本", ocr_text, height=200)
+            st.text_area("提取的文本", parsed_ocr_text, height=200)
 
         with st.spinner("🤖 正在调用大模型分析..."):
             # 构建 Prompt
@@ -675,7 +675,7 @@ if uploaded_file:
             text_analysis = llm_response[:llm_response.find('{')] if '{' in llm_response else llm_response
 
             # 校验文件类型与财务相关性
-            validation = validate_file_type_and_content(ocr_text, file_type)
+            validation = validate_file_type_and_content(parsed_ocr_text, file_type)
             if validation["error"]:
                 st.error(validation["error"])
                 st.stop()
