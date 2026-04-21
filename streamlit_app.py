@@ -659,38 +659,91 @@ if uploaded_file:
                 st.error(f"大模型调用失败：{e}")
                 st.stop()
 
-            # 提取 JSON 部分
-            json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
-            if json_match:
+             # 提取 JSON 部分（增强版：支持 Markdown 代码块、注释、字段名容错）
+            # 1. 先尝试从 Markdown 代码块中提取
+            json_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', llm_response, re.DOTALL)
+            if json_block_match:
+                json_str = json_block_match.group(1)
+            else:
+                # 2. 降级：直接搜索最外层大括号
+                json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
+                json_str = json_match.group() if json_match else ""
+
+            extracted = {}
+            if json_str:
                 try:
-                    raw_extracted = json.loads(json_match.group())
+                    # 清洗：去除注释（// 和 /* */）
+                    json_str = re.sub(r'//.*?\n', '\n', json_str)
+                    json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
+                    # 解析
+                    raw_extracted = json.loads(json_str)
+                except json.JSONDecodeError:
+                    # 如果标准解析失败，尝试用 ast.literal_eval 或简单容错
+                    import ast
+                    try:
+                        raw_extracted = ast.literal_eval(json_str)
+                    except:
+                        raw_extracted = {}
+            else:
+                raw_extracted = {}
 
-                    bank_name = raw_extracted.get("bank_name") or raw_extracted.get("bank") or raw_extracted.get("银行名称")
-                    account_number = raw_extracted.get("account_number") or raw_extracted.get("account") or raw_extracted.get("账号")
-                    ending_balance = raw_extracted.get("ending_balance") or raw_extracted.get("balance") or raw_extracted.get("期末余额")
-                    statement_period = raw_extracted.get("statement_period") or raw_extracted.get("period") or raw_extracted.get("期间")
-                    currency = raw_extracted.get("currency", "RMB")
-                    confidence = raw_extracted.get("confidence", 0.5)
-                    risk_notes = raw_extracted.get("risk_notes") or raw_extracted.get("审计意见") or raw_extracted.get("opinion")
+            # 字段名容错：支持多种可能的key（大小写、中英文）
+            def get_field(data, *keys):
+                for k in keys:
+                    if k in data and data[k] is not None:
+                        return data[k]
+                return None
 
-                    if not risk_notes:
-                        if ending_balance is not None:
-                            if ending_balance < 0:
-                                risk_notes = "期末余额为负数，存在透支或异常交易风险，建议进一步核实。"
-                            else:
-                                risk_notes = "基于已执行的程序，未发现重大异常，银行存款余额可确认。"
-                        else:
-                            risk_notes = "未能提取到期末余额，请人工复核原始文件。"
+            bank_name = get_field(raw_extracted, "bank_name", "bank", "银行名称", "BankName", "bankName")
+            account_number = get_field(raw_extracted, "account_number", "account", "账号", "AccountNumber", "accountNumber")
+            ending_balance = get_field(raw_extracted, "ending_balance", "balance", "期末余额", "EndingBalance", "closing_balance", "ClosingBalance")
+            statement_period = get_field(raw_extracted, "statement_period", "period", "期间", "对账期间", "StatementPeriod")
+            currency = get_field(raw_extracted, "currency", "币种", "Currency", "Cur")
+            confidence = get_field(raw_extracted, "confidence", "置信度", "Confidence")
+            risk_notes = get_field(raw_extracted, "risk_notes", "riskNotes", "审计意见", "opinion", "risk_opinion")
 
-                    extracted = {
-                        "bank_name": bank_name,
-                        "account_number": account_number,
-                        "ending_balance": ending_balance,
-                        "statement_period": statement_period,
-                        "currency": currency,
-                        "confidence": confidence,
-                        "risk_notes": risk_notes
-                    }
+            # 余额数值清洗：去除货币符号、逗号，转为float
+            if ending_balance is not None:
+                if isinstance(ending_balance, str):
+                    ending_balance = re.sub(r'[£$¥€,\s]', '', ending_balance)
+                    try:
+                        ending_balance = float(ending_balance)
+                    except:
+                        ending_balance = None
+                elif isinstance(ending_balance, (int, float)):
+                    pass
+                else:
+                    ending_balance = None
+
+            # 置信度处理
+            if confidence is None:
+                confidence = 0.5
+            elif isinstance(confidence, str):
+                try:
+                    confidence = float(confidence.strip('%')) / 100 if '%' in confidence else float(confidence)
+                except:
+                    confidence = 0.5
+            confidence = max(0.0, min(1.0, confidence))
+
+            # 兜底审计意见
+            if not risk_notes:
+                if ending_balance is not None:
+                    if ending_balance < 0:
+                        risk_notes = "期末余额为负数，存在透支或异常交易风险，建议进一步核实。"
+                    else:
+                        risk_notes = "基于已执行的程序，未发现重大异常，银行存款余额可确认。"
+                else:
+                    risk_notes = "未能提取到期末余额，请人工复核原始文件。"
+
+            extracted = {
+                "bank_name": bank_name,
+                "account_number": account_number,
+                "ending_balance": ending_balance,
+                "statement_period": statement_period,
+                "currency": currency or "未识别",
+                "confidence": confidence,
+                "risk_notes": risk_notes
+            }
                 except:
                     extracted = {"bank_name": "解析失败", "error": "JSON 格式错误"}
             else:
