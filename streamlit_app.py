@@ -398,10 +398,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -------------------- 开篇故事 --------------------
-with st.expander("📖 我们的故事：从加班的审计师说起", expanded=True):
+with st.expander("📖 我们的故事：从凌晨三点的审计师说起", expanded=True):
     st.markdown("""
     <div class="story-box">
-        <p class="quote-text">“实习时，我每天要处理几十份银行对账单PDF。公司配了智谱大模型，能把PDF转成Excel。但问题来了——AI识别出的数字，我不敢直接用。水印遮挡的金额、印章盖住的账号、跨页表格错位的行，每一个都要肉眼再核对一遍。原本以为AI能省时间，结果每次还是要加班几个小时。面前是几百页带水印的银行对账单、开户清单、信用报告……格式五花八门，数据散落在各处。这个月底的审计报告，又是一场和时间的赛跑。我多么希望，能有一个数字化大脑帮我处理这些重复劳动，让我专注于真正重要的专业判断。”</p>
+        <p class="quote-text">“凌晨三点，我揉了揉发酸的眼睛。面前是几百页带水印的银行对账单、开户清单、信用报告……格式五花八门，数据散落在各处。这个月底的审计报告，又是一场和时间的赛跑。我多么希望，能有一个数字化大脑帮我处理这些重复劳动，让我专注于真正重要的专业判断。”</p>
         <p style="text-align: right; margin-top: 1rem;">—— <span class="auditor-name">一位四大审计师</span></p>
     </div>
     """, unsafe_allow_html=True)
@@ -447,7 +447,7 @@ with col2:
     <div class="theory-box">
         <p class="theory-label">德勤研究指出：</p>
         <p class="theory-quote">“AI将重构审计作业流程，从<span class="theory-highlight">经验驱动</span>转向<span class="theory-highlight">智能驱动</span>。”</p>
-        <p class="theory-label" style="margin-top:1rem;">杨卓凡导师强调：</p>
+        <p class="theory-label" style="margin-top:1rem;">Jeffrey导师强调：</p>
         <p class="theory-quote">“审计数字化大脑需具备<span class="theory-highlight">感知、认知、决策、协同</span>四大能力，实现从<span class="theory-highlight">单点工具</span>到<span class="theory-highlight">统一智能层</span>的跃迁。”</p>
         <p style="margin-top:1rem; color: #68d391;">✅ AuditFlow正是这一理念的完美实践。</p>
     </div>
