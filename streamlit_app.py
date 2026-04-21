@@ -20,14 +20,14 @@ from openpyxl.styles import Font, Alignment, PatternFill
 # ==================== 环境自适应：尝试导入本地 OCR ====================
 PADDLE_OCR_AVAILABLE = False
 try:
-    from paddleocr import PaddleOCR
+    from ppocr_lite import PPOCRLite
     import cv2
     import numpy as np
     from pdf2image import convert_from_path
 
-    @st.cache_resource
-    def init_paddle_ocr():
-        return PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
+   @st.cache_resource
+   def init_ocr():
+    return PPOCRLite()
 
     PADDLE_OCR_AVAILABLE = True
 except ImportError:
@@ -510,9 +510,8 @@ if uploaded_file:
 
                 # PaddleOCR 提取文本
                 ocr = init_paddle_ocr()
-                result = ocr.ocr(work_image_path, cls=True)
-                if result and result[0]:
-                    ocr_text = "\n".join([line[1][0] for line in result[0] if line])
+                result = ocr.run(work_image_path)
+                ocr_text = "\n".join([line.text for line in result])
             else:
                 st.info("📍 云端环境，使用 SiliconFlow 多模态大模型直接 OCR")
                 img_bytes = uploaded_file.getvalue()
