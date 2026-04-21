@@ -36,29 +36,54 @@ except ImportError:
 # ==================== 全局辅助函数 ====================
 def parse_deepseek_ocr_response(raw_response: str) -> str:
     """
-    解析 DeepSeek-OCR 的返回内容，提取 Markdown 表格并转换为易读文本。
+    解析 DeepSeek-OCR 的返回内容，提取纯文本内容（去除坐标和标签）。
     """
     import re
     
-    # 提取所有 Markdown 表格
+    # 1. 提取所有 Markdown 表格（DeepSeek-OCR 会将表格包裹在 <table> 标签中）
     table_pattern = r'<table>(.*?)</table>'
     tables = re.findall(table_pattern, raw_response, re.DOTALL)
     
+    parsed_parts = []
+    
     if tables:
-        # 有表格：返回第一个表格的 Markdown 格式（或合并所有表格）
-        markdown_table = tables[0].strip()
-        # 简单清洗：去除 HTML 标签，保留 Markdown 分隔符
-        markdown_table = re.sub(r'</?table>', '', markdown_table)
-        return f"[表格内容]\n{markdown_table}"
-    else:
-        # 无表格：提取所有 <|ref|>text 内容
-        text_pattern = r'<\|ref\|>text<\|/ref\|><\|det\|>\[[^\]]*\]<\|/det\|>\s*([^<]+)'
-        texts = re.findall(text_pattern, raw_response, re.DOTALL)
-        if texts:
-            return "\n".join([t.strip() for t in texts if t.strip()])
-        else:
-            # 降级：返回原始响应的前 500 字符
-            return raw_response[:500]
+        # 有表格：提取表格内容，并清理 HTML 标签
+        for table in tables:
+            # 去除 <table> 标签本身（已在正则中处理）
+            clean_table = table.strip()
+            # 将 Markdown 格式的表格行保留
+            parsed_parts.append("[表格内容]")
+            parsed_parts.append(clean_table)
+    
+    # 2. 提取所有纯文本块（<|ref|>text</|ref|> 标签内的内容）
+    text_pattern = r'<\|ref\|>text<\|/ref\|><\|det\|>\[[^\]]*\]<\|/det\|>\s*([^<]+)'
+    texts = re.findall(text_pattern, raw_response, re.DOTALL)
+    for text in texts:
+        clean_text = text.strip()
+        if clean_text and not clean_text.startswith('<'):  # 过滤掉仍含标签的行
+            parsed_parts.append(clean_text)
+    
+    # 3. 如果上述都没提取到，降级处理：删除所有尖括号标签和坐标
+    if not parsed_parts:
+        # 删除所有 <|...|> 标签
+        clean = re.sub(r'<\|[^|]+\|>', ' ', raw_response)
+        # 删除坐标 [[...]]
+        clean = re.sub(r'\[\[[^\]]+\]\]', ' ', clean)
+        # 删除 HTML 标签
+        clean = re.sub(r'<[^>]+>', ' ', clean)
+        # 合并多余空白
+        clean = re.sub(r'\s+', ' ', clean).strip()
+        return clean[:2000] if clean else raw_response[:500]
+    
+    # 4. 合并所有提取到的部分
+    result = "\n".join(parsed_parts)
+    # 最终清理：删除残留的坐标和标签
+    result = re.sub(r'<\|[^|]+\|>', '', result)
+    result = re.sub(r'\[\[[^\]]+\]\]', '', result)
+    result = re.sub(r'<[^>]+>', '', result)
+    result = re.sub(r'\n\s*\n', '\n', result)  # 合并多余空行
+    
+    return result.strip() or raw_response[:500]
 
 def validate_file_type_and_content(llm_response, selected_type):
     """校验上传文件与所选类型是否一致，以及是否为财务相关文件"""
@@ -70,7 +95,7 @@ def validate_file_type_and_content(llm_response, selected_type):
         "📬 银行询证函（回函）": ["银行询证函", "函证", "回函", "1-14项"],
         "⚖️ 银行存款余额调节表": ["余额调节表", "未达账项", "调节后余额", "企业账面"]
     }
-    finance_keywords = ["银行", "余额", "交易", "账户", "存款", "贷款", "信用", "担保", "函证", "对账", "借方", "贷方", "金额", "人民币", "USD", "RMB"]
+       finance_keywords = ["银行", "余额", "交易", "账户", "存款", "贷款", "信用", "担保", "函证", "对账", "借方", "贷方", "金额", "人民币", "USD", "RMB", "HSBC", "Balance", "Statement", "Account", "Sortcode", "IBAN", "BIC"]
     content_lower = llm_response.lower()
     expected_keywords = type_keywords.get(selected_type, [])
     type_match = any(kw.lower() in content_lower for kw in expected_keywords)
