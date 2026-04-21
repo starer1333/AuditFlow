@@ -516,8 +516,8 @@ if uploaded_file:
                     img_b64 = base64.b64encode(img_bytes).decode()
 
                     # ========== 请替换为您的实际配置 ==========
-                    DEEPSEEK_OCR_URL = "sk-rvrkjzeivbzdynqmtospowwmrxhsvutzmiayusacnqrgtjng"  # 或您的自定义端点
-                    DEEPSEEK_API_KEY = SILICONFLOW_API_KEY  # 可直接复用，也可单独配置
+                    DEEPSEEK_OCR_URL = "https://api.siliconflow.cn/v1/chat/completions"  # 或您的自定义端点
+                    DEEPSEEK_API_KEY = st.secrets.get("sk-rvrkjzeivbzdynqmtospowwmrxhsvutzmiayusacnqrgtjng", "") 
                     DEEPSEEK_MODEL = "deepseek-ai/DeepSeek-OCR"
                     # =========================================
 
