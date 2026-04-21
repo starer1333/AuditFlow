@@ -509,37 +509,39 @@ if uploaded_file:
                     ocr = init_ocr()
                     result = ocr.run(work_image_path)
                     ocr_text = "\n".join([line.text for line in result])
-            else:
-                # 云端降级：调用多模态大模型直接OCR
-                with st.spinner("☁️ 正在调用云端大模型提取文本..."):
+                        else:
+                # 云端降级：调用 DeepSeek-OCR 专用模型
+                with st.spinner("☁️ 正在调用 DeepSeek-OCR 提取文本..."):
                     img_bytes = uploaded_file.getvalue()
                     img_b64 = base64.b64encode(img_bytes).decode()
 
-                    ocr_prompt = """请仔细观察这张图片，提取图片中的所有文字内容。
-要求：
-1. 只输出从图片中识别到的原文，不要添加任何解释
-2. 保留原文的换行和格式
-3. 如果是银行对账单，务必完整提取银行名称、账号、交易明细、余额等信息"""
+                    # ========== 请替换为您的实际配置 ==========
+                    DEEPSEEK_OCR_URL = "sk-rvrkjzeivbzdynqmtospowwmrxhsvutzmiayusacnqrgtjng"  # 或您的自定义端点
+                    DEEPSEEK_API_KEY = SILICONFLOW_API_KEY  # 可直接复用，也可单独配置
+                    DEEPSEEK_MODEL = "deepseek-ai/DeepSeek-OCR"
+                    # =========================================
 
-                    headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
+                    ocr_prompt = "<image>\n<|grounding|>Convert the document to markdown."
+
+                    headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
                     payload = {
-                        "model": SILICONFLOW_MODEL,
+                        "model": DEEPSEEK_MODEL,
                         "messages": [{
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": ocr_prompt},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
+                                {"type": "text", "text": ocr_prompt}
                             ]
                         }],
                         "temperature": 0.1,
                         "max_tokens": 2048
                     }
                     try:
-                        resp = requests.post("https://api.siliconflow.cn/v1/chat/completions", headers=headers, json=payload, timeout=60)
+                        resp = requests.post(DEEPSEEK_OCR_URL, headers=headers, json=payload, timeout=60)
                         resp.raise_for_status()
                         ocr_text = resp.json()["choices"][0]["message"]["content"]
                     except Exception as e:
-                        st.error(f"OCR识别失败: {e}")
+                        st.error(f"DeepSeek-OCR识别失败: {e}")
                         st.stop()
 
             # 确保ocr_text有内容
