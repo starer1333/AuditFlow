@@ -13,7 +13,9 @@ import re
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
-# ==================== 辅助函数 ====================
+
+# ==================== 全局辅助函数 ====================
+
 def validate_file_type_and_content(llm_response, selected_type):
     """校验上传文件与所选类型是否一致，以及是否为财务相关文件"""
     type_keywords = {
@@ -35,6 +37,212 @@ def validate_file_type_and_content(llm_response, selected_type):
         "warning": None if type_match else f"您上传的文件内容与所选类型（{selected_type}）不一致",
         "error": None if is_finance else "上传的文件并非财务相关文件，请上传银行对账单、开户清单等审计资料"
     }
+
+
+def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
+    """根据文件类型生成对应的Excel底稿"""
+    wb = openpyxl.Workbook()
+
+    if "银行对账单" in file_type or "调节表" in file_type:
+        ws = wb.active
+        ws.title = "银行存款余额调节表"
+        ws.merge_cells("A1:F1")
+        ws["A1"] = "银行存款余额调节表"
+        ws["A1"].font = Font(size=16, bold=True)
+        ws["A1"].alignment = Alignment(horizontal="center")
+
+        bank = data.get("bank_name", "未识别")
+        acc = data.get("account_number", "未识别")
+        bal = data.get("ending_balance", 0)
+        period = data.get("statement_period", "未识别")
+
+        row = 3
+        info = [
+            ["被审计单位", company, "", "索引号", "A-2-1"],
+            ["银行名称", bank, "", "账号", acc],
+            ["对账单余额", f"{bal:,.2f}" if isinstance(bal, (int, float)) else "未识别", "", "期间", period]
+        ]
+        for r in info:
+            for col, v in enumerate(r, 1):
+                ws.cell(row=row, column=col, value=v)
+            row += 1
+
+        row += 1
+        headers = ["项目", "金额", "审计标识", "说明"]
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=h)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill("solid", fgColor="D3D3D3")
+        row += 1
+
+        table = [
+            ["银行对账单余额", bal if isinstance(bal, (int, float)) else "", "B", "大模型识别"],
+            ["加：企业已收银行未收", "", "", ""],
+            ["减：企业已付银行未付", "", "", ""],
+            ["调节后余额", bal if isinstance(bal, (int, float)) else "", "G", ""],
+            ["企业账面余额", "", "", "待填写"],
+            ["差异", "", "", ""]
+        ]
+        for item, amt, mark, note in table:
+            ws.cell(row=row, column=1, value=item)
+            if amt:
+                ws.cell(row=row, column=2, value=amt).number_format = '#,##0.00'
+            ws.cell(row=row, column=3, value=mark)
+            ws.cell(row=row, column=4, value=note)
+            row += 1
+
+        ws.cell(row=row, column=1, value=f"审计意见：{data.get('risk_notes', '')}")
+        row += 2
+        ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+        for col, width in enumerate([20, 18, 12, 35], 1):
+            ws.column_dimensions[chr(64+col)].width = width
+
+    elif "开户清单" in file_type:
+        ws = wb.active
+        ws.title = "银行存款明细表"
+        ws.merge_cells("A1:G1")
+        ws["A1"] = "银行存款明细表"
+        ws["A1"].font = Font(size=16, bold=True)
+        ws["A1"].alignment = Alignment(horizontal="center")
+
+        headers = ["序号", "银行名称", "账号", "币种", "账户性质", "开户日期", "账户状态"]
+        row = 3
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=h)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill("solid", fgColor="D3D3D3")
+        row += 1
+
+        accounts = data.get("accounts", [])
+        if accounts:
+            for i, acc in enumerate(accounts, 1):
+                ws.cell(row=row, column=1, value=i)
+                ws.cell(row=row, column=2, value=acc.get("bank_name", ""))
+                ws.cell(row=row, column=3, value=acc.get("account_number", ""))
+                ws.cell(row=row, column=4, value=acc.get("currency", "RMB"))
+                ws.cell(row=row, column=5, value=acc.get("account_type", ""))
+                ws.cell(row=row, column=6, value=acc.get("open_date", ""))
+                ws.cell(row=row, column=7, value=acc.get("status", ""))
+                row += 1
+        else:
+            ws.cell(row=row, column=1, value="未识别到账户信息")
+
+        row += 2
+        ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+    elif "销户清单" in file_type:
+        ws = wb.active
+        ws.title = "账户变更明细表"
+        ws.merge_cells("A1:F1")
+        ws["A1"] = "销户清单明细表"
+        ws["A1"].font = Font(size=16, bold=True)
+        ws["A1"].alignment = Alignment(horizontal="center")
+
+        headers = ["序号", "银行名称", "账号", "销户日期", "销户时余额", "销户原因"]
+        row = 3
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=h)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill("solid", fgColor="D3D3D3")
+        row += 1
+
+        closed = data.get("closed_accounts", [])
+        if closed:
+            for i, acc in enumerate(closed, 1):
+                ws.cell(row=row, column=1, value=i)
+                ws.cell(row=row, column=2, value=acc.get("bank_name", ""))
+                ws.cell(row=row, column=3, value=acc.get("account_number", ""))
+                ws.cell(row=row, column=4, value=acc.get("close_date", ""))
+                ws.cell(row=row, column=5, value=acc.get("close_balance", ""))
+                ws.cell(row=row, column=6, value=acc.get("close_reason", ""))
+                row += 1
+
+        row += 2
+        ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+    elif "信用报告" in file_type:
+        ws = wb.active
+        ws.title = "借款及担保底稿"
+        ws["A1"] = "企业信用报告摘要"
+        ws["A1"].font = Font(size=16, bold=True)
+        row = 3
+        info = [
+            ["企业名称", data.get("company_name", "未识别")],
+            ["统一社会信用代码", data.get("credit_code", "未识别")],
+            ["报告日期", data.get("report_date", "未识别")]
+        ]
+        for label, val in info:
+            ws.cell(row=row, column=1, value=label).font = Font(bold=True)
+            ws.cell(row=row, column=2, value=val)
+            row += 1
+
+        row += 1
+        ws.cell(row=row, column=1, value="未结清贷款").font = Font(bold=True)
+        row += 1
+        loans = data.get("loans", [])
+        if loans:
+            headers = ["金融机构", "贷款金额", "期限", "担保方式"]
+            for col, h in enumerate(headers, 1):
+                cell = ws.cell(row=row, column=col, value=h)
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill("solid", fgColor="D3D3D3")
+            row += 1
+            for loan in loans:
+                ws.cell(row=row, column=1, value=loan.get("bank", ""))
+                ws.cell(row=row, column=2, value=loan.get("amount", ""))
+                ws.cell(row=row, column=3, value=loan.get("term", ""))
+                ws.cell(row=row, column=4, value=loan.get("guarantee_type", ""))
+                row += 1
+
+        row += 2
+        ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+    elif "询证函" in file_type:
+        ws = wb.active
+        ws.title = "银行函证控制表"
+        ws.merge_cells("A1:D1")
+        ws["A1"] = "银行询证函回函摘要"
+        ws["A1"].font = Font(size=16, bold=True)
+        ws["A1"].alignment = Alignment(horizontal="center")
+
+        headers = ["函证项目", "回函结果", "差异说明"]
+        row = 3
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=h)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill("solid", fgColor="D3D3D3")
+        row += 1
+
+        items = data.get("items", {})
+        for key, val in items.items():
+            ws.cell(row=row, column=1, value=key)
+            ws.cell(row=row, column=2, value=val)
+            ws.cell(row=row, column=3, value="")
+            row += 1
+
+        row += 2
+        ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+    else:
+        ws = wb.active
+        ws.title = "审计底稿"
+        ws["A1"] = "审计数据摘要"
+        ws["A1"].font = Font(size=16, bold=True)
+        row = 3
+        for key, val in data.items():
+            if key not in ["raw", "analysis"]:
+                ws.cell(row=row, column=1, value=str(key)).font = Font(bold=True)
+                ws.cell(row=row, column=2, value=str(val))
+                row += 1
+
+    for col in range(1, 10):
+        ws.column_dimensions[chr(64+col)].width = 18
+
+    excel_io = io.BytesIO()
+    wb.save(excel_io)
+    excel_io.seek(0)
+    return excel_io
 
 
 # -------------------- 页面配置 --------------------
@@ -121,11 +329,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -------------------- 开篇故事：制造冲突 --------------------
-with st.expander("📖 我们的故事：从凌晨三点的审计师说起", expanded=False):
+with st.expander("📖 我们的故事：从凌晨三点的审计师说起", expanded=True):
     st.markdown("""
     <div class="story-box">
         <p class="quote-text">“凌晨三点，我揉了揉发酸的眼睛。面前是几百页带水印的银行对账单、开户清单、信用报告……格式五花八门，数据散落在各处。这个月底的审计报告，又是一场和时间的赛跑。我多么希望，能有一个数字化大脑帮我处理这些重复劳动，让我专注于真正重要的专业判断。”</p>
-        <p style="text-align: right; margin-top: 1rem;">—— <span class="auditor-name">一位四大审计师的自白</span></p>
+        <p style="text-align: right; margin-top: 1rem;">—— <span class="auditor-name">一位四大审计师</span></p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -176,7 +384,7 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
-with st.expander("🚀 未来展望：从单文件识别到跨文档智能审计", expanded=False):
+with st.expander("🚀 未来展望：从单文件识别到跨文档智能审计", expanded=True):
     st.markdown("""
     <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 20px; padding: 1.5rem; border: 1px solid #334155;">
         <p style="color: #cbd5e1; font-size: 1rem; line-height: 1.6;">
@@ -195,6 +403,7 @@ with st.expander("🚀 未来展望：从单文件识别到跨文档智能审计
     """, unsafe_allow_html=True)
 
 st.divider()
+
 # -------------------- 文件上传区 --------------------
 st.markdown("### 📁 上传银行源文件")
 col1, col2 = st.columns([1, 2])
@@ -226,11 +435,6 @@ with col2:
 SILICONFLOW_API_KEY = st.secrets.get("SILICONFLOW_API_KEY", "sk-owvtekhwtwulnbuomcvsrrzglwprcyfylehowryuufxfxuau")
 SILICONFLOW_MODEL = "Qwen/Qwen2-VL-72B-Instruct"
 
-if uploaded_file:
-    st.success(f"✅ 已上传：{uploaded_file.name} ({len(uploaded_file.getvalue())/1024:.1f} KB)")
-    if uploaded_file.type.startswith("image"):
-        st.image(uploaded_file, width=400)
-        
 # -------------------- 审计意见参考库（内置范例，可编辑）--------------------
 with st.expander("📝 审计意见参考库（系统内置范例，可编辑）", expanded=True):
     default_reference = """一、收入相关问题
@@ -289,8 +493,7 @@ with st.expander("📝 审计意见参考库（系统内置范例，可编辑）
 （六）未恰当核算股份支付相关递延所得税
 根据税法相关规定，对于附有业绩条件或服务条件的股权激励计划，企业按照会计准则确认的成本费用在等待期不得税前抵扣，待股权激励计划行权时方可抵扣，可抵扣的金额为实际行权时的股票公允价值与激励对象支付的行权金额之间的差额。根据企业会计准则及相关规定，企业应根据资产负债表日存在的信息估计未来可以税前抵扣的金额，以未来期间很可能取得的应纳税所得额为限确认递延所得税资产。审阅分析发现，部分上市公司以前年度向高管和核心员工授予股票期权，在预计其未来存在足够的应纳税所得额情况下，上市公司未在等待期内对未来可税前抵扣的金额进行估计，未确认递延所得税资产。该股权激励计划等待期届满时，部分员工放弃行权，上市公司根据未行权数量、当日股票公允价值与激励对象支付的行权价之间的差额，一次性确认递延所得税资产。前述情况下，上市公司应在等待期内的每个资产负债表日，合理估计预计行权数量和当日股票公允价值，确认递延所得税资产；对于资产负债表日无法合理预见的员工自愿放弃行权的部分，应冲减前期已确认的递延所得税资产。
 （七）未正确区分会计估计变更与前期差错更正
-根据企业会计准则及相关规定，会计估计变更，是指由于资产和负债的当前状况及预期经济利益和义务发生了变化，从而对资产或负债的账面价值或者资产的定期消耗金额进行调整。前期差错，是指由于没有运用或错误运用相关可靠信息，而对前期财务报表造成省略或错报。审阅分析发现，部分上市公司没有正确区分会计估计变更和差错更正。例如，有的上市公司销售产品并提供不构成单项履约义务的维保服务，以往年度仅对维保费用中的材料支出计提预计负债，售后人员薪酬及其他费用于实际发生时计入当期损益，报告期内改为按照合同金额的一定比例对包括材料、人工及其他费用在内的全部维保费用计提预计负债，并作为会计估计变更进行处理。有的上市公司报告期内调整计提存货跌价准备的类别维度，如将同类产品组合计提调整为按照单个产品类别进行测算等，作为会计估计变更进行处理。上市公司不应将前述情况简单认定为会计估计变更，如果前期做出会计估计时，未能合理使用编制报表时已经存在且能够取得的可靠信息，如未按照准则有关规定对履行质保义务所需的直接人工、直接材料、制造费用（或类似费用）等进行恰当估计，或未能合理确定存货跌价准备计提基础等，导致前期会计估计结果未恰当反映当时情况，则报告期内的会计处理变化属于前期差错而非会计估计变更。
-"""
+根据企业会计准则及相关规定，会计估计变更，是指由于资产和负债的当前状况及预期经济利益和义务发生了变化，从而对资产或负债的账面价值或者资产的定期消耗金额进行调整。前期差错，是指由于没有运用或错误运用相关可靠信息，而对前期财务报表造成省略或错报。审阅分析发现，部分上市公司没有正确区分会计估计变更和差错更正。例如，有的上市公司销售产品并提供不构成单项履约义务的维保服务，以往年度仅对维保费用中的材料支出计提预计负债，售后人员薪酬及其他费用于实际发生时计入当期损益，报告期内改为按照合同金额的一定比例对包括材料、人工及其他费用在内的全部维保费用计提预计负债，并作为会计估计变更进行处理。有的上市公司报告期内调整计提存货跌价准备的类别维度，如将同类产品组合计提调整为按照单个产品类别进行测算等，作为会计估计变更进行处理。上市公司不应将前述情况简单认定为会计估计变更，如果前期做出会计估计时，未能合理使用编制报表时已经存在且能够取得的可靠信息，如未按照准则有关规定对履行质保义务所需的直接人工、直接材料、制造费用（或类似费用）等进行恰当估计，或未能合理确定存货跌价准备计提基础等，导致前期会计估计结果未恰当反映当时情况，则报告期内的会计处理变化属于前期差错而非会计估计变更。"""
 
     audit_opinion_reference = st.text_area(
         "参考范例（可手动编辑）",
@@ -300,6 +503,10 @@ with st.expander("📝 审计意见参考库（系统内置范例，可编辑）
         help="修改后将影响大模型生成的审计意见措辞风格。"
     )
 
+if uploaded_file:
+    st.success(f"✅ 已上传：{uploaded_file.name} ({len(uploaded_file.getvalue())/1024:.1f} KB)")
+    if uploaded_file.type.startswith("image"):
+        st.image(uploaded_file, width=400)
 
     if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
         with st.spinner("⏳ 正在调用多模态大模型分析..."):
@@ -379,7 +586,7 @@ with st.expander("📝 审计意见参考库（系统内置范例，可编辑）
             # 文字分析部分
             text_analysis = llm_response[:llm_response.find('{')] if '{' in llm_response else llm_response
 
-            # 校验文件类型与财务相关性（使用开头的函数）
+            # 校验文件类型与财务相关性
             validation = validate_file_type_and_content(llm_response, file_type)
             if validation["error"]:
                 st.error(validation["error"])
@@ -410,7 +617,6 @@ with st.expander("📝 审计意见参考库（系统内置范例，可编辑）
 
             # 生成 Excel 底稿
             st.markdown("### 📥 下载审计底稿")
-            # 注意：generate_excel_by_type 函数已在上文定义，直接调用
             excel_bytes = generate_excel_by_type(extracted, file_type)
 
             st.download_button(
@@ -429,266 +635,8 @@ with st.expander("📝 审计意见参考库（系统内置范例，可编辑）
                 use_container_width=True
             )
 
-                        # ---------- 生成 Excel 底稿 ----------
-            st.markdown("### 📥 下载审计底稿")
-
-            def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
-                """根据文件类型生成对应的Excel底稿"""
-                wb = openpyxl.Workbook()
-
-                if "银行对账单" in file_type:
-                    ws = wb.active
-                    ws.title = "银行存款余额调节表"
-                    ws.merge_cells("A1:F1")
-                    ws["A1"] = "银行存款余额调节表"
-                    ws["A1"].font = Font(size=16, bold=True)
-                    ws["A1"].alignment = Alignment(horizontal="center")
-
-                    bank = data.get("bank_name", "未识别")
-                    acc = data.get("account_number", "未识别")
-                    bal = data.get("ending_balance", 0)
-                    period = data.get("statement_period", "未识别")
-
-                    row = 3
-                    info = [
-                        ["被审计单位", company, "", "索引号", "A-2-1"],
-                        ["银行名称", bank, "", "账号", acc],
-                        ["对账单余额", f"{bal:,.2f}" if isinstance(bal, (int, float)) else "未识别", "", "期间", period]
-                    ]
-                    for r in info:
-                        for col, v in enumerate(r, 1):
-                            ws.cell(row=row, column=col, value=v)
-                        row += 1
-
-                    row += 1
-                    headers = ["项目", "金额", "审计标识", "说明"]
-                    for col, h in enumerate(headers, 1):
-                        cell = ws.cell(row=row, column=col, value=h)
-                        cell.font = Font(bold=True)
-                        cell.fill = PatternFill("solid", fgColor="D3D3D3")
-                    row += 1
-
-                    table = [
-                        ["银行对账单余额", bal if isinstance(bal, (int, float)) else "", "B", "大模型识别"],
-                        ["加：企业已收银行未收", "", "", ""],
-                        ["减：企业已付银行未付", "", "", ""],
-                        ["调节后余额", bal if isinstance(bal, (int, float)) else "", "G", ""],
-                        ["企业账面余额", "", "", "待填写"],
-                        ["差异", "", "", ""]
-                    ]
-                    for item, amt, mark, note in table:
-                        ws.cell(row=row, column=1, value=item)
-                        if amt:
-                            ws.cell(row=row, column=2, value=amt).number_format = '#,##0.00'
-                        ws.cell(row=row, column=3, value=mark)
-                        ws.cell(row=row, column=4, value=note)
-                        row += 1
-
-                    ws.cell(row=row, column=1, value=f"审计意见：{data.get('risk_notes', '')}")
-                    row += 2
-                    ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
-                    for col, width in enumerate([20, 18, 12, 35], 1):
-                        ws.column_dimensions[chr(64+col)].width = width
-
-                elif "开户清单" in file_type:
-                    ws = wb.active
-                    ws.title = "银行存款明细表"
-                    ws.merge_cells("A1:G1")
-                    ws["A1"] = "银行存款明细表"
-                    ws["A1"].font = Font(size=16, bold=True)
-                    ws["A1"].alignment = Alignment(horizontal="center")
-
-                    headers = ["序号", "银行名称", "账号", "币种", "账户性质", "开户日期", "账户状态"]
-                    row = 3
-                    for col, h in enumerate(headers, 1):
-                        cell = ws.cell(row=row, column=col, value=h)
-                        cell.font = Font(bold=True)
-                        cell.fill = PatternFill("solid", fgColor="D3D3D3")
-                    row += 1
-
-                    accounts = data.get("accounts", [])
-                    if accounts:
-                        for i, acc in enumerate(accounts, 1):
-                            ws.cell(row=row, column=1, value=i)
-                            ws.cell(row=row, column=2, value=acc.get("bank_name", ""))
-                            ws.cell(row=row, column=3, value=acc.get("account_number", ""))
-                            ws.cell(row=row, column=4, value=acc.get("currency", "RMB"))
-                            ws.cell(row=row, column=5, value=acc.get("account_type", ""))
-                            ws.cell(row=row, column=6, value=acc.get("open_date", ""))
-                            ws.cell(row=row, column=7, value=acc.get("status", ""))
-                            row += 1
-                    else:
-                        ws.cell(row=row, column=1, value="未识别到账户信息")
-
-                    row += 2
-                    ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
-                elif "销户清单" in file_type:
-                    ws = wb.active
-                    ws.title = "账户变更明细表"
-                    ws.merge_cells("A1:F1")
-                    ws["A1"] = "销户清单明细表"
-                    ws["A1"].font = Font(size=16, bold=True)
-                    ws["A1"].alignment = Alignment(horizontal="center")
-
-                    headers = ["序号", "银行名称", "账号", "销户日期", "销户时余额", "销户原因"]
-                    row = 3
-                    for col, h in enumerate(headers, 1):
-                        cell = ws.cell(row=row, column=col, value=h)
-                        cell.font = Font(bold=True)
-                        cell.fill = PatternFill("solid", fgColor="D3D3D3")
-                    row += 1
-
-                    closed = data.get("closed_accounts", [])
-                    if closed:
-                        for i, acc in enumerate(closed, 1):
-                            ws.cell(row=row, column=1, value=i)
-                            ws.cell(row=row, column=2, value=acc.get("bank_name", ""))
-                            ws.cell(row=row, column=3, value=acc.get("account_number", ""))
-                            ws.cell(row=row, column=4, value=acc.get("close_date", ""))
-                            ws.cell(row=row, column=5, value=acc.get("close_balance", ""))
-                            ws.cell(row=row, column=6, value=acc.get("close_reason", ""))
-                            row += 1
-
-                    row += 2
-                    ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
-                elif "信用报告" in file_type:
-                    ws = wb.active
-                    ws.title = "借款及担保底稿"
-                    ws["A1"] = "企业信用报告摘要"
-                    ws["A1"].font = Font(size=16, bold=True)
-                    row = 3
-                    info = [
-                        ["企业名称", data.get("company_name", "未识别")],
-                        ["统一社会信用代码", data.get("credit_code", "未识别")],
-                        ["报告日期", data.get("report_date", "未识别")]
-                    ]
-                    for label, val in info:
-                        ws.cell(row=row, column=1, value=label).font = Font(bold=True)
-                        ws.cell(row=row, column=2, value=val)
-                        row += 1
-
-                    row += 1
-                    ws.cell(row=row, column=1, value="未结清贷款").font = Font(bold=True)
-                    row += 1
-                    loans = data.get("loans", [])
-                    if loans:
-                        headers = ["金融机构", "贷款金额", "期限", "担保方式"]
-                        for col, h in enumerate(headers, 1):
-                            cell = ws.cell(row=row, column=col, value=h)
-                            cell.font = Font(bold=True)
-                            cell.fill = PatternFill("solid", fgColor="D3D3D3")
-                        row += 1
-                        for loan in loans:
-                            ws.cell(row=row, column=1, value=loan.get("bank", ""))
-                            ws.cell(row=row, column=2, value=loan.get("amount", ""))
-                            ws.cell(row=row, column=3, value=loan.get("term", ""))
-                            ws.cell(row=row, column=4, value=loan.get("guarantee_type", ""))
-                            row += 1
-
-                    row += 2
-                    ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
-                elif "询证函" in file_type:
-                    ws = wb.active
-                    ws.title = "银行函证控制表"
-                    ws.merge_cells("A1:D1")
-                    ws["A1"] = "银行询证函回函摘要"
-                    ws["A1"].font = Font(size=16, bold=True)
-                    ws["A1"].alignment = Alignment(horizontal="center")
-
-                    headers = ["函证项目", "回函结果", "差异说明"]
-                    row = 3
-                    for col, h in enumerate(headers, 1):
-                        cell = ws.cell(row=row, column=col, value=h)
-                        cell.font = Font(bold=True)
-                        cell.fill = PatternFill("solid", fgColor="D3D3D3")
-                    row += 1
-
-                    items = data.get("items", {})
-                    for key, val in items.items():
-                        ws.cell(row=row, column=1, value=key)
-                        ws.cell(row=row, column=2, value=val)
-                        ws.cell(row=row, column=3, value="")
-                        row += 1
-
-                    row += 2
-                    ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
-                else:
-                    # 默认使用银行对账单模板
-                    ws = wb.active
-                    ws.title = "审计底稿"
-                    ws["A1"] = "审计数据摘要"
-                    ws["A1"].font = Font(size=16, bold=True)
-                    row = 3
-                    for key, val in data.items():
-                        if key not in ["raw", "analysis"]:
-                            ws.cell(row=row, column=1, value=str(key)).font = Font(bold=True)
-                            ws.cell(row=row, column=2, value=str(val))
-                            row += 1
-
-                # 统一调整列宽
-                for col in range(1, 10):
-                    ws.column_dimensions[chr(64+col)].width = 18
-
-                excel_io = io.BytesIO()
-                wb.save(excel_io)
-                excel_io.seek(0)
-                return excel_io
-
-            # ---------- 文件内容校验 ----------
-            def validate_file_content(llm_text, selected_type):
-                type_keywords = {
-                    "🏦 银行对账单": ["对账单", "交易明细", "借方", "贷方", "余额"],
-                    "📋 开户清单": ["已开立", "账户清单", "开户日期", "账户性质"],
-                    "❌ 销户清单": ["销户", "账户关闭", "注销"],
-                    "📊 信用报告": ["信用报告", "信贷记录", "征信", "贷款"],
-                    "📬 询证函": ["询证函", "函证", "回函", "1-14"],
-                    "⚖️ 调节表": ["调节表", "未达账项", "调节后余额"]
-                }
-                finance_kw = ["银行", "余额", "交易", "账户", "存款", "贷款", "信用", "担保", "函证", "对账", "金额"]
-                content = llm_text.lower()
-
-                expected = type_keywords.get(selected_type, [])
-                type_match = any(kw.lower() in content for kw in expected)
-                is_finance = any(kw.lower() in content for kw in finance_kw)
-
-                return {
-                    "type_match": type_match,
-                    "is_finance": is_finance,
-                    "warning": None if type_match else f"⚠️ 文件内容与所选类型（{selected_type}）可能不一致",
-                    "error": None if is_finance else "❌ 上传文件并非财务相关资料"
-                }
-
-            validation = validate_file_content(text_analysis + json.dumps(extracted, ensure_ascii=False), file_type)
-
-            if validation["error"]:
-                st.error(validation["error"])
-                st.stop()
-            elif validation["warning"]:
-                st.warning(validation["warning"])
-
-            excel_bytes = generate_excel_by_type(extracted, file_type)
-
-            st.download_button(
-                label="📊 下载 Excel 底稿",
-                data=excel_bytes,
-                file_name=f"{file_type.strip('🏦📋❌📊📬⚖️ ')}底稿_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-
-            st.download_button(
-                label="📄 下载完整报告 (JSON)",
-                data=json.dumps({"analysis": text_analysis, "extracted": extracted}, ensure_ascii=False, indent=2),
-                file_name=f"AuditFlow_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json",
-                use_container_width=True
-            )
-with st.expander("🔒 数据安全与隐私保护", expanded=False):
+# -------------------- 数据安全与隐私保护 --------------------
+with st.expander("🔒 数据安全与隐私保护", expanded=True):
     st.markdown("""
     <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 20px; padding: 1.5rem; border: 1px solid #334155;">
         <p style="color: #cbd5e1; font-size: 1rem; line-height: 1.6;">
