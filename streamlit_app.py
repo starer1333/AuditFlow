@@ -517,7 +517,7 @@ if uploaded_file:
 
                     # ========== 请替换为您的实际配置 ==========
                     DEEPSEEK_OCR_URL = "https://api.siliconflow.cn/v1/chat/completions"  # 或您的自定义端点
-                    DEEPSEEK_API_KEY = st.secrets.get("sk-rvrkjzeivbzdynqmtospowwmrxhsvutzmiayusacnqrgtjng", "") 
+                    DEEPSEEK_API_KEY = st.secrets.get("sk-owvtekhwtwulnbuomcvsrrzglwprcyfylehowryuufxfxuau", "") 
                     DEEPSEEK_MODEL = "deepseek-ai/DeepSeek-OCR"
                     # =========================================
 
