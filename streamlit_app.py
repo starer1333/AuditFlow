@@ -509,7 +509,7 @@ if uploaded_file:
                     ocr = init_ocr()
                     result = ocr.run(work_image_path)
                     ocr_text = "\n".join([line.text for line in result])
-                        else:
+            else:
                 # 云端降级：调用 DeepSeek-OCR 专用模型
                 with st.spinner("☁️ 正在调用 DeepSeek-OCR 提取文本..."):
                     img_bytes = uploaded_file.getvalue()
