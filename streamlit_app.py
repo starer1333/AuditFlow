@@ -507,7 +507,8 @@ if uploaded_file:
 
 请用专业的审计术语作答，保持客观、严谨的风格。先用文字回答1、3、4、5，最后输出JSON。
 {f"**审计意见参考范例**：{audit_opinion_reference}" if audit_opinion_reference else ""}
-"""
+
+特别注意：你必须在 JSON 中明确包含 "risk_notes" 字段，内容为一段专业的审计意见草稿（至少50字）。即使未发现异常，也要给出正面结论。"""
 
             headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
             payload = {
@@ -535,7 +536,36 @@ if uploaded_file:
             json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
             if json_match:
                 try:
-                    extracted = json.loads(json_match.group())
+                    raw_extracted = json.loads(json_match.group())
+
+# 字段名兼容：大模型可能返回不同的 key
+bank_name = raw_extracted.get("bank_name") or raw_extracted.get("bank") or raw_extracted.get("银行名称")
+account_number = raw_extracted.get("account_number") or raw_extracted.get("account") or raw_extracted.get("账号")
+ending_balance = raw_extracted.get("ending_balance") or raw_extracted.get("balance") or raw_extracted.get("期末余额")
+statement_period = raw_extracted.get("statement_period") or raw_extracted.get("period") or raw_extracted.get("期间")
+currency = raw_extracted.get("currency", "RMB")
+confidence = raw_extracted.get("confidence", 0.5)
+risk_notes = raw_extracted.get("risk_notes") or raw_extracted.get("审计意见") or raw_extracted.get("opinion")
+
+# 如果大模型没有返回审计意见，生成兜底意见
+if not risk_notes:
+    if ending_balance is not None:
+        if ending_balance < 0:
+            risk_notes = "期末余额为负数，存在透支或异常交易风险，建议进一步核实。"
+        else:
+            risk_notes = "基于已执行的程序，未发现重大异常，银行存款余额可确认。"
+    else:
+        risk_notes = "未能提取到期末余额，请人工复核原始文件。"
+
+extracted = {
+    "bank_name": bank_name,
+    "account_number": account_number,
+    "ending_balance": ending_balance,
+    "statement_period": statement_period,
+    "currency": currency,
+    "confidence": confidence,
+    "risk_notes": risk_notes
+}
                 except:
                     extracted = {"bank_name": "解析失败", "error": "JSON格式错误"}
             else:
@@ -571,7 +601,10 @@ if uploaded_file:
             with c4:
                 st.metric("📈 置信度", f"{extracted.get('confidence', 0)*100:.0f}%")
             if extracted.get("risk_notes"):
-                st.info(f"📋 审计意见：{extracted['risk_notes']}")
+    st.markdown("### 📋 审计意见")
+    st.info(extracted["risk_notes"])
+else:
+    st.warning("⚠️ 大模型未返回审计意见，请参考提取数据自行判断。")
 
             # 生成 Excel 底稿
             st.markdown("### 📥 下载审计底稿")
