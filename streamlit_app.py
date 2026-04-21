@@ -25,14 +25,13 @@ try:
     import numpy as np
     from pdf2image import convert_from_path
 
-   @st.cache_resource
-   def init_ocr():
-    return PPOCRLite()
+    @st.cache_resource
+    def init_ocr():
+        return PPOCRLite()
 
     PADDLE_OCR_AVAILABLE = True
 except ImportError:
     pass  # 云端环境，降级为调用多模态大模型
-
 
 # ==================== 全局辅助函数 ====================
 
@@ -496,26 +495,55 @@ if uploaded_file:
 
             ocr_text = ""
 
-            # 环境自适应：优先使用本地 PaddleOCR，否则用云端多模态大模型直接 OCR
-            if PADDLE_OCR_AVAILABLE:
-                st.info("📍 检测到本地 PaddleOCR，使用本地引擎识别")
-                # PDF 转图片
-                if suffix.lower() == '.pdf':
-                    from pdf2image import convert_from_path
-                    images = convert_from_path(temp_input_path, dpi=200)
-                    work_image_path = os.path.join(tempfile.gettempdir(), "pdf_page_1.png")
-                    images[0].save(work_image_path, "PNG")
-                else:
-                    work_image_path = temp_input_path
-
-                # PaddleOCR 提取文本
-                ocr = init_paddle_ocr()
-                result = ocr.run(work_image_path)
-                ocr_text = "\n".join([line.text for line in result])
+           if uploaded_file:
+    # ... (您原有的文件保存和类型判断逻辑)
+    
+    if PADDLE_OCR_AVAILABLE:
+        # 本地OCR处理 (使用 ppocr-lite)
+        with st.spinner("⏳ 正在使用本地OCR提取文本..."):
+            # PDF 转图片
+            if suffix.lower() == '.pdf':
+                images = convert_from_path(temp_input_path, dpi=200)
+                work_image_path = os.path.join(tempfile.gettempdir(), "pdf_page_1.png")
+                images[0].save(work_image_path, "PNG")
             else:
-                st.info("📍 云端环境，使用 SiliconFlow 多模态大模型直接 OCR")
-                img_bytes = uploaded_file.getvalue()
-                img_b64 = base64.b64encode(img_bytes).decode()
+                work_image_path = temp_input_path
+
+            ocr = init_ocr()
+            result = ocr.run(work_image_path)
+            ocr_text = "\n".join([line.text for line in result])
+    else:
+        # 云端降级：调用多模态大模型直接OCR
+        with st.spinner("⏳ 正在调用云端大模型提取文本..."):
+            img_bytes = uploaded_file.getvalue()
+            img_b64 = base64.b64encode(img_bytes).decode()
+            
+            headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
+            payload = {
+                "model": SILICONFLOW_MODEL,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "请提取图片中的所有文字，只输出文字内容，不要添加任何解释。"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                    ]
+                }],
+                "temperature": 0.1,
+                "max_tokens": 2048
+            }
+            resp = requests.post("https://api.siliconflow.cn/v1/chat/completions", headers=headers, json=payload, timeout=60)
+            if resp.status_code == 200:
+                ocr_text = resp.json()["choices"][0]["message"]["content"]
+            else:
+                st.error(f"OCR识别失败: {resp.text}")
+                st.stop()
+
+    # 确保ocr_text有内容
+    if not ocr_text:
+        st.error("❌ 未能识别到任何文本，请检查图片质量。")
+        st.stop()
+
+    # ... (后续您将 ocr_text 传给大模型分析等操作)
                 ocr_prompt = """请仔细观察这张图片，提取图片中的所有文字内容。
 要求：
 1. 只输出从图片中识别到的原文，不要添加任何解释
