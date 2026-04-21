@@ -95,7 +95,7 @@ def validate_file_type_and_content(llm_response, selected_type):
         "📬 银行询证函（回函）": ["银行询证函", "函证", "回函", "1-14项"],
         "⚖️ 银行存款余额调节表": ["余额调节表", "未达账项", "调节后余额", "企业账面"]
     }
-       finance_keywords = ["银行", "余额", "交易", "账户", "存款", "贷款", "信用", "担保", "函证", "对账", "借方", "贷方", "金额", "人民币", "USD", "RMB", "HSBC", "Balance", "Statement", "Account", "Sortcode", "IBAN", "BIC"]
+    finance_keywords = ["银行", "余额", "交易", "账户", "存款", "贷款", "信用", "担保", "函证", "对账", "借方", "贷方", "金额", "人民币", "USD", "RMB", "HSBC", "Balance", "Statement", "Account", "Sortcode", "IBAN", "BIC"]
     content_lower = llm_response.lower()
     expected_keywords = type_keywords.get(selected_type, [])
     type_match = any(kw.lower() in content_lower for kw in expected_keywords)
