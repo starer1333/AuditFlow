@@ -1,6 +1,6 @@
 """
-AuditFlow — 审计数据中枢（完整商赛版）
-基于 SiliconFlow 多模态大模型 · 零本地依赖 · 展示商业故事与理论深度
+AuditFlow — 审计数据中枢（完整本地版）
+基于 PaddleOCR 本地预处理 + SiliconFlow 多模态大模型
 德勤数字化精英挑战赛 Team J
 """
 
@@ -10,13 +10,51 @@ import base64
 import json
 import io
 import re
+import os
+import tempfile
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
+from paddleocr import PaddleOCR
+import cv2
+import numpy as np
+from pdf2image import convert_from_path
+import pandas as pd
+
+# ==================== 初始化 OCR (全局单例) ====================
+@st.cache_resource
+def init_ocr():
+    """初始化 PaddleOCR，使用缓存避免重复加载模型"""
+    return PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
+
+ocr = init_ocr()
 
 # ==================== 全局辅助函数 ====================
 
-def validate_file_type_and_content(llm_response, selected_type):
+def preprocess_image(image_path):
+    """图像预处理：灰度化、降噪、二值化，提高OCR准确率"""
+    img = cv2.imread(image_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    binary = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    return binary
+
+def extract_text_with_paddleocr(image_path):
+    """使用PaddleOCR提取图片中的全部文本，包括表格结构"""
+    # 图像预处理
+    processed_img = preprocess_image(image_path)
+    temp_path = os.path.join(tempfile.gettempdir(), "temp_ocr.png")
+    cv2.imwrite(temp_path, processed_img)
+    
+    # OCR识别
+    result = ocr.ocr(temp_path, cls=True)
+    if not result or not result[0]:
+        return ""
+    
+    texts = [line[1][0] for line in result[0] if line]
+    return "\n".join(texts)
+
+def validate_file_type_and_content(text_content, selected_type):
     """校验上传文件与所选类型是否一致，以及是否为财务相关文件"""
     type_keywords = {
         "🏦 银行对账单": ["银行对账单", "Bank Statement", "交易明细", "借方", "贷方", "余额", "期初", "期末"],
@@ -27,7 +65,7 @@ def validate_file_type_and_content(llm_response, selected_type):
         "⚖️ 银行存款余额调节表": ["余额调节表", "未达账项", "调节后余额", "企业账面"]
     }
     finance_keywords = ["银行", "余额", "交易", "账户", "存款", "贷款", "信用", "担保", "函证", "对账", "借方", "贷方", "金额", "人民币", "USD", "RMB"]
-    content_lower = llm_response.lower()
+    content_lower = text_content.lower()
     expected_keywords = type_keywords.get(selected_type, [])
     type_match = any(kw.lower() in content_lower for kw in expected_keywords)
     is_finance = any(kw.lower() in content_lower for kw in finance_keywords)
@@ -38,11 +76,9 @@ def validate_file_type_and_content(llm_response, selected_type):
         "error": None if is_finance else "上传的文件并非财务相关文件，请上传银行对账单、开户清单等审计资料"
     }
 
-
 def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
     """根据文件类型生成对应的Excel底稿"""
     wb = openpyxl.Workbook()
-
     if "银行对账单" in file_type or "调节表" in file_type:
         ws = wb.active
         ws.title = "银行存款余额调节表"
@@ -76,7 +112,7 @@ def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
         row += 1
 
         table = [
-            ["银行对账单余额", bal if isinstance(bal, (int, float)) else "", "B", "大模型识别"],
+            ["银行对账单余额", bal if isinstance(bal, (int, float)) else "", "B", "OCR识别"],
             ["加：企业已收银行未收", "", "", ""],
             ["减：企业已付银行未付", "", "", ""],
             ["调节后余额", bal if isinstance(bal, (int, float)) else "", "G", ""],
@@ -94,7 +130,6 @@ def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
         ws.cell(row=row, column=1, value=f"审计意见：{data.get('risk_notes', '')}")
         row += 2
         ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
         for col, width in enumerate([20, 18, 12, 35], 1):
             ws.column_dimensions[chr(64+col)].width = width
 
@@ -127,7 +162,6 @@ def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
                 row += 1
         else:
             ws.cell(row=row, column=1, value="未识别到账户信息")
-
         row += 2
         ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
@@ -157,7 +191,6 @@ def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
                 ws.cell(row=row, column=5, value=acc.get("close_balance", ""))
                 ws.cell(row=row, column=6, value=acc.get("close_reason", ""))
                 row += 1
-
         row += 2
         ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
@@ -176,7 +209,6 @@ def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
             ws.cell(row=row, column=1, value=label).font = Font(bold=True)
             ws.cell(row=row, column=2, value=val)
             row += 1
-
         row += 1
         ws.cell(row=row, column=1, value="未结清贷款").font = Font(bold=True)
         row += 1
@@ -194,7 +226,6 @@ def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
                 ws.cell(row=row, column=3, value=loan.get("term", ""))
                 ws.cell(row=row, column=4, value=loan.get("guarantee_type", ""))
                 row += 1
-
         row += 2
         ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
@@ -220,7 +251,6 @@ def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
             ws.cell(row=row, column=2, value=val)
             ws.cell(row=row, column=3, value="")
             row += 1
-
         row += 2
         ws.cell(row=row, column=1, value=f"编制人：AuditFlow  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
@@ -244,15 +274,14 @@ def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
     excel_io.seek(0)
     return excel_io
 
-
-# -------------------- 页面配置 --------------------
+# ==================== 页面配置 ====================
 st.set_page_config(
     page_title="AuditFlow — 审计数据中枢",
     page_icon="🌊",
     layout="wide"
 )
 
-# -------------------- 样式优化 --------------------
+# -------------------- 样式优化 (保持不变) --------------------
 st.markdown("""
 <style>
     .main-header { text-align: center; padding: 2rem 0 1rem 0; }
@@ -270,10 +299,6 @@ st.markdown("""
     .stFileUploader > div {
         border: 2px dashed #4f6af5 !important; border-radius: 20px !important;
         background: rgba(79, 106, 245, 0.05) !important; padding: 2rem !important;
-    }
-    .result-card {
-        background: #1e293b; border-radius: 20px; padding: 1.5rem;
-        border: 1px solid #334155; margin-top: 1.5rem;
     }
     .feature-card {
         background: #1e293b; border-radius: 20px; padding: 1.2rem 0.8rem;
@@ -341,7 +366,7 @@ with st.expander("📖 我们的故事：从凌晨三点的审计师说起", exp
 st.markdown("### 🔬 核心能力 · 攻克审计资料处理的5大难点")
 cols = st.columns(5)
 features = [
-    ("📄", "跨页合并", "大模型全局感知，自动拼接跨页表格"),
+    ("📄", "跨页合并", "PaddleOCR全局感知，自动拼接跨页表格"),
     ("🀄️", "生僻汉字", "语义理解 + 字典纠错，精准识别罕见字"),
     ("🌐", "中英文混排", "多语言统一映射，余额/Balance自动对齐"),
     ("💧", "水印印章", "视觉大模型主动忽略干扰，聚焦核心文字"),
@@ -467,17 +492,40 @@ if uploaded_file:
         st.image(uploaded_file, width=400)
 
     if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
-        with st.spinner("⏳ 正在调用多模态大模型分析..."):
-            # 将图片转为 base64
-            img_bytes = uploaded_file.getvalue()
-            img_b64 = base64.b64encode(img_bytes).decode()
+        with st.spinner("⏳ 正在调用 PaddleOCR 提取文本..."):
+            # 保存上传文件到临时路径
+            suffix = os.path.splitext(uploaded_file.name)[1]
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(uploaded_file.getvalue())
+                temp_input_path = tmp.name
 
+            # PDF 转图片
+            if suffix.lower() == '.pdf':
+                images = convert_from_path(temp_input_path, dpi=200)
+                work_image_path = os.path.join(tempfile.gettempdir(), "pdf_page_1.png")
+                images[0].save(work_image_path, "PNG")
+            else:
+                work_image_path = temp_input_path
+
+            # PaddleOCR 提取文本
+            ocr_text = extract_text_with_paddleocr(work_image_path)
+            if not ocr_text:
+                st.error("OCR 未能识别到任何文本，请检查图片质量。")
+                st.stop()
+
+            st.markdown("### 🔍 PaddleOCR 识别结果")
+            st.text_area("提取的原始文本", ocr_text, height=200)
+
+        with st.spinner("🤖 正在调用大模型分析..."):
             # 构建 Prompt
-            prompt = f"""你是一名资深注册会计师（CPA），拥有多年四大会计师事务所审计经验。请根据用户上传的图片内容，完成专业判断。
+            prompt = f"""你是一名资深注册会计师（CPA），拥有多年四大会计师事务所审计经验。请根据以下OCR从图片中提取的文本内容，完成专业判断。
 
 **用户选择的文件类型**：{file_type}
 
-请仔细观察图片，完成以下任务：
+**OCR提取的文本内容**：
+{ocr_text[:3000]}
+
+请仔细观察文本内容，完成以下任务：
 
 1. **内容识别与分类**：
    - 判断该文件是否与用户所选类型一致，列出判断依据
@@ -492,8 +540,6 @@ if uploaded_file:
    请根据实际文件类型返回对应JSON，其他类型返回空。
 
 3. **数据质量评估**：
-   - 是否存在水印/印章遮挡导致的关键字段识别困难
-   - 是否存在生僻汉字或中英文混排导致的识别误差
    - 给出综合置信度（0.0-1.0）
 
 4. **审计意见草稿**（参考中国注册会计师审计准则第1501号）：
@@ -513,13 +559,7 @@ if uploaded_file:
             headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
             payload = {
                 "model": SILICONFLOW_MODEL,
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
-                    ]
-                }],
+                "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.1,
                 "max_tokens": 2048
             }
@@ -573,7 +613,7 @@ if uploaded_file:
             text_analysis = llm_response[:llm_response.find('{')] if '{' in llm_response else llm_response
 
             # 校验文件类型与财务相关性
-            validation = validate_file_type_and_content(llm_response, file_type)
+            validation = validate_file_type_and_content(ocr_text, file_type)
             if validation["error"]:
                 st.error(validation["error"])
                 st.stop()
@@ -583,7 +623,7 @@ if uploaded_file:
             # 展示分析报告
             st.markdown("---")
             st.markdown("### 🤖 大模型分析报告")
-            with st.expander("📋 查看详细分析（水印/生僻字/混排/表格）", expanded=True):
+            with st.expander("📋 查看详细分析", expanded=True):
                 st.markdown(text_analysis)
 
             # 展示提取字段
