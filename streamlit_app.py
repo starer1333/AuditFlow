@@ -568,7 +568,7 @@ if uploaded_file:
                     # ========== 请替换为您的实际配置 ==========
                     DEEPSEEK_OCR_URL = "https://api.siliconflow.cn/v1/chat/completions"  # 或您的自定义端点
                     DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY","" )
-                    DEEPSEEK_MODEL = "deepseek-ai/DeepSeek-OCR"
+                    DEEPSEEK_MODEL = "Qwen/Qwen2-VL-72B-Instruct"
                     # =========================================
 
                     ocr_prompt = "<image>\n<|grounding|>Convert the document to markdown."
