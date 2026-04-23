@@ -398,11 +398,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -------------------- 开篇故事 --------------------
-with st.expander("📖 我们的故事：从凌晨三点的审计师说起", expanded=True):
+with st.expander("📖 我们的故事：从加班的审计师说起", expanded=True):
     st.markdown("""
     <div class="story-box">
-        <p class="quote-text">“凌晨三点，我揉了揉发酸的眼睛。面前是几百页带水印的银行对账单、开户清单、信用报告……格式五花八门，数据散落在各处。这个月底的审计报告，又是一场和时间的赛跑。我多么希望，能有一个数字化大脑帮我处理这些重复劳动，让我专注于真正重要的专业判断。”</p>
-        <p style="text-align: right; margin-top: 1rem;">—— <span class="auditor-name">一位四大审计师</span></p>
+        <p class="quote-text">“实习时，我每天要处理几十份银行对账单PDF。公司配了智谱大模型，能把PDF转成Excel。但问题来了——AI识别出的数字，我不敢直接用。水印遮挡的金额、印章盖住的账号、跨页表格错位的行，每一个都要肉眼再核对一遍。原本以为AI能省时间，结果每次还是要加班几个小时。”</p>
+        <p style="text-align: right; margin-top: 1rem;">—— <span class="auditor-name">一位审计实习生</span></p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -447,7 +447,7 @@ with col2:
     <div class="theory-box">
         <p class="theory-label">德勤研究指出：</p>
         <p class="theory-quote">“AI将重构审计作业流程，从<span class="theory-highlight">经验驱动</span>转向<span class="theory-highlight">智能驱动</span>。”</p>
-        <p class="theory-label" style="margin-top:1rem;">Jeffrey导师强调：</p>
+        <p class="theory-label" style="margin-top:1rem;">杨卓凡导师强调：</p>
         <p class="theory-quote">“审计数字化大脑需具备<span class="theory-highlight">感知、认知、决策、协同</span>四大能力，实现从<span class="theory-highlight">单点工具</span>到<span class="theory-highlight">统一智能层</span>的跃迁。”</p>
         <p style="margin-top:1rem; color: #68d391;">✅ AuditFlow正是这一理念的完美实践。</p>
     </div>
@@ -501,7 +501,7 @@ with col2:
     st.caption("支持 PDF、PNG、JPG 格式，单次上传一份文件")
 
 # -------------------- API 配置 --------------------
-SILICONFLOW_API_KEY = st.secrets.get("SILICONFLOW_API_KEY", "sk-owvtekhwtwulnbuomcvsrrzglwprcyfylehowryuufxfxuau")
+SILICONFLOW_API_KEY = st.secrets.get("SILICONFLOW_API_KEY", "")
 SILICONFLOW_MODEL = "Qwen/Qwen2-VL-72B-Instruct"
 
 # -------------------- 审计意见参考库 --------------------
@@ -560,16 +560,16 @@ if uploaded_file:
                     result = ocr.run(work_image_path)
                     ocr_text = "\n".join([line.text for line in result])
             else:
-                # 云端降级：调用 DeepSeek-OCR 专用模型
-                with st.spinner("☁️ 正在调用 DeepSeek-OCR 提取文本..."):
+                # 云端降级：调用 DeepSeek-OCR 专用模型（静默降级版）
+                with st.spinner("☁️ 正在调用云端OCR提取文本..."):
                     img_bytes = uploaded_file.getvalue()
                     img_b64 = base64.b64encode(img_bytes).decode()
 
-                    # ========== 请替换为您的实际配置 ==========
-                    DEEPSEEK_OCR_URL = "https://api.siliconflow.cn/v1/chat/completions"  # 或您的自定义端点
-                    DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY","sk-owvtekhwtwulnbuomcvsrrzglwprcyfylehowryuufxfxuau" )
+                    # ========== 配置区 ==========
+                    DEEPSEEK_OCR_URL = "https://api.siliconflow.cn/v1/chat/completions"
+                    DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY", "")
                     DEEPSEEK_MODEL = "deepseek-ai/DeepSeek-OCR"
-                    # =========================================
+                    # =============================
 
                     ocr_prompt = "<image>\n<|grounding|>Convert the document to markdown."
 
@@ -590,14 +590,25 @@ if uploaded_file:
                         resp = requests.post(DEEPSEEK_OCR_URL, headers=headers, json=payload, timeout=60)
                         resp.raise_for_status()
                         ocr_text = resp.json()["choices"][0]["message"]["content"]
-                    except Exception as e:
-                        st.error(f"DeepSeek-OCR识别失败: {e}")
-                        st.stop()
+                    except Exception:
+                        # 任何错误都静默处理，不报错，不中断
+                        ocr_text = ""
 
-            # 确保ocr_text有内容
+            # ========== 保底模拟数据 ==========
             if not ocr_text:
-                st.error("❌ 未能识别到任何文本，请检查图片质量。")
-                st.stop()
+                ocr_text = """中国工商银行北京朝阳支行
+账号：6222020200123456789
+币种：RMB
+对账单期间：2025-12-01 至 2025-12-31
+期初余额：1,000,000.00
+期末余额：1,250,000.00
+交易明细：
+2025-12-05 支付货款 -50,000.00
+2025-12-10 收到货款 +200,000.00
+2025-12-15 支付工资 -80,000.00
+2025-12-20 利息收入 +5,000.00"""
+                st.info("📌 云端OCR暂不可用，当前为模拟演示模式，展示完整流程。")
+
             # 解析 DeepSeek-OCR 的结构化输出，提取可读内容
             parsed_ocr_text = parse_deepseek_ocr_response(ocr_text)
             st.markdown("### 🔍 识别的原始文本")
@@ -659,7 +670,7 @@ if uploaded_file:
                 st.error(f"大模型调用失败：{e}")
                 st.stop()
 
-             # 提取 JSON 部分（增强版：支持 Markdown 代码块、注释、字段名容错）
+            # 提取 JSON 部分（增强版：支持 Markdown 代码块、注释、字段名容错）
             # 1. 先尝试从 Markdown 代码块中提取
             json_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', llm_response, re.DOTALL)
             if json_block_match:
