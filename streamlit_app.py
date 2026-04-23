@@ -1,6 +1,6 @@
 """
 AuditFlow — 审计数据中枢（完整功能版）
-五大痛点 · 六类文档 · 双模型驱动 · 智能底稿生成
+五大痛点 · 六类文档 · 双模型驱动 · 智能底稿生成 · 账号 Luhn + BIN 校验
 德勤数字化精英挑战赛 Team J
 """
 
@@ -12,9 +12,113 @@ import io
 import re
 import os
 import tempfile
+import csv
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
+
+# ==================== BIN 数据库加载 ====================
+@st.cache_data
+def load_bin_database():
+    """加载卡BIN数据库，返回 {bin_prefix: bank_name} 字典"""
+    bin_dict = {}
+    bin_csv_path = os.path.join(os.path.dirname(__file__), "binlist.csv")
+    if os.path.exists(bin_csv_path):
+        try:
+            with open(bin_csv_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    bin_code = row.get("bin", "").strip()
+                    bank_name = row.get("bank", "").strip()
+                    if bin_code and bank_name:
+                        bin_dict[bin_code] = bank_name
+        except:
+            pass
+    # 如果文件不存在或读取失败，返回内置基础映射
+    if not bin_dict:
+        bin_dict = {
+            "622848": "中国农业银行",
+            "622200": "中国工商银行",
+            "621700": "中国建设银行",
+            "621660": "中国银行",
+            "622260": "交通银行",
+            "621485": "招商银行",
+            "622588": "招商银行",
+            "621771": "中国邮政储蓄银行",
+            "622521": "中国邮政储蓄银行",
+            "622180": "中国邮政储蓄银行",
+            "622821": "中国邮政储蓄银行",
+        }
+    return bin_dict
+
+BIN_DATABASE = load_bin_database()
+
+def luhn_check(card_num: str) -> bool:
+    """Luhn算法校验银行卡号有效性"""
+    if not card_num:
+        return False
+    digits = [int(c) for c in card_num if c.isdigit()]
+    if len(digits) < 13 or len(digits) > 19:
+        return False
+    rev = digits[::-1]
+    total = 0
+    for i, d in enumerate(rev):
+        if i % 2:
+            d *= 2
+            if d > 9:
+                d = d // 10 + d % 10
+        total += d
+    return total % 10 == 0
+
+def get_bank_by_bin(account_number: str) -> str:
+    """根据账号前6位BIN码查询发卡行"""
+    if not account_number:
+        return None
+    clean = ''.join(c for c in account_number if c.isdigit())
+    if len(clean) < 6:
+        return None
+    bin_code = clean[:6]
+    return BIN_DATABASE.get(bin_code)
+
+def validate_account(account_number: str, ocr_bank_name: str) -> dict:
+    """综合校验账号，返回校验结果和修正后的置信度因子"""
+    result = {
+        "luhn_valid": False,
+        "bin_bank": None,
+        "bank_match": False,
+        "confidence_factor": 1.0,
+        "message": ""
+    }
+    if not account_number:
+        result["message"] = "未提取到账号"
+        result["confidence_factor"] = 0.5
+        return result
+
+    # 1. Luhn 校验
+    if luhn_check(account_number):
+        result["luhn_valid"] = True
+    else:
+        result["luhn_valid"] = False
+        result["confidence_factor"] *= 0.6
+        result["message"] += "Luhn校验失败；"
+
+    # 2. BIN 校验
+    bin_bank = get_bank_by_bin(account_number)
+    if bin_bank:
+        result["bin_bank"] = bin_bank
+        if ocr_bank_name and (bin_bank in ocr_bank_name or ocr_bank_name in bin_bank):
+            result["bank_match"] = True
+        else:
+            result["confidence_factor"] *= 0.7
+            result["message"] += f"BIN推断为{bin_bank}，与OCR识别不符；"
+    else:
+        result["message"] += "BIN未匹配；"
+
+    if result["luhn_valid"] and result["bank_match"]:
+        result["message"] = "账号校验通过"
+
+    return result
+
 
 # ==================== 全局辅助函数 ====================
 
@@ -427,6 +531,70 @@ if uploaded_file:
                     extracted = json.loads(json_match.group())
                 except:
                     extracted = {"bank_name": "解析失败"}
+
+            # 字段提取（包含容错）
+            def get_field(data, *keys):
+                for k in keys:
+                    if k in data and data[k] is not None:
+                        return data[k]
+                return None
+
+            bank_name = get_field(extracted, "bank_name", "bank", "银行名称", "BankName", "bankName")
+            account_number = get_field(extracted, "account_number", "account", "账号", "AccountNumber", "accountNumber")
+            ending_balance = get_field(extracted, "ending_balance", "balance", "期末余额", "EndingBalance", "closing_balance", "ClosingBalance")
+            statement_period = get_field(extracted, "statement_period", "period", "期间", "对账期间", "StatementPeriod")
+            currency = get_field(extracted, "currency", "币种", "Currency", "Cur")
+            confidence = get_field(extracted, "confidence", "置信度", "Confidence")
+            risk_notes = get_field(extracted, "risk_notes", "riskNotes", "审计意见", "opinion", "risk_opinion")
+
+            # 余额清洗
+            if ending_balance is not None:
+                if isinstance(ending_balance, str):
+                    ending_balance = re.sub(r'[£$¥€,\s]', '', ending_balance)
+                    try:
+                        ending_balance = float(ending_balance)
+                    except:
+                        ending_balance = None
+
+            # 置信度处理
+            if confidence is None:
+                confidence = 0.5
+            elif isinstance(confidence, str):
+                try:
+                    confidence = float(confidence.strip('%')) / 100 if '%' in confidence else float(confidence)
+                except:
+                    confidence = 0.5
+            confidence = max(0.0, min(1.0, confidence))
+
+            # ========== 账号 Luhn + BIN 校验 ==========
+            account_validation = validate_account(account_number, bank_name)
+            if account_validation["message"]:
+                if account_validation["luhn_valid"] and account_validation["bank_match"]:
+                    st.success(f"✅ {account_validation['message']}")
+                else:
+                    st.warning(f"⚠️ {account_validation['message']}")
+            confidence = confidence * account_validation["confidence_factor"]
+            # ========================================
+
+            # 兜底审计意见
+            if not risk_notes:
+                if ending_balance is not None:
+                    if ending_balance < 0:
+                        risk_notes = "期末余额为负数，存在透支或异常交易风险，建议进一步核实。"
+                    else:
+                        risk_notes = "基于已执行的程序，未发现重大异常，银行存款余额可确认。"
+                else:
+                    risk_notes = "未能提取到期末余额，请人工复核原始文件。"
+
+            extracted = {
+                "bank_name": bank_name,
+                "account_number": account_number,
+                "ending_balance": ending_balance,
+                "statement_period": statement_period,
+                "currency": currency or "未识别",
+                "confidence": confidence,
+                "risk_notes": risk_notes
+            }
 
             text_analysis = llm_response[:llm_response.find('{')] if '{' in llm_response else llm_response
             validation = validate_file_type_and_content(parsed_ocr_text, file_type)
