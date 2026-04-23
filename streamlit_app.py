@@ -34,7 +34,6 @@ def load_bin_database():
                         bin_dict[bin_code] = bank_name
         except:
             pass
-    # 如果文件不存在或读取失败，返回内置基础映射
     if not bin_dict:
         bin_dict = {
             "622848": "中国农业银行",
@@ -94,7 +93,6 @@ def validate_account(account_number: str, ocr_bank_name: str) -> dict:
         result["confidence_factor"] = 0.5
         return result
 
-    # 1. Luhn 校验
     if luhn_check(account_number):
         result["luhn_valid"] = True
     else:
@@ -102,7 +100,6 @@ def validate_account(account_number: str, ocr_bank_name: str) -> dict:
         result["confidence_factor"] *= 0.6
         result["message"] += "Luhn校验失败；"
 
-    # 2. BIN 校验
     bin_bank = get_bank_by_bin(account_number)
     if bin_bank:
         result["bin_bank"] = bin_bank
@@ -187,7 +184,9 @@ def generate_excel_by_type(data, file_type, company="XX科技有限公司"):
         ws["A1"].alignment = Alignment(horizontal="center")
         bank = data.get("bank_name", "未识别")
         acc = data.get("account_number", "未识别")
-        bal = data.get("ending_balance", 0)
+        bal = data.get("ending_balance")
+        if not isinstance(bal, (int, float)):
+            bal = 0
         period = data.get("statement_period", "未识别")
         row = 3
         info = [
@@ -532,7 +531,6 @@ if uploaded_file:
                 except:
                     extracted = {"bank_name": "解析失败"}
 
-            # 字段提取（包含容错）
             def get_field(data, *keys):
                 for k in keys:
                     if k in data and data[k] is not None:
@@ -547,7 +545,7 @@ if uploaded_file:
             confidence = get_field(extracted, "confidence", "置信度", "Confidence")
             risk_notes = get_field(extracted, "risk_notes", "riskNotes", "审计意见", "opinion", "risk_opinion")
 
-            # 余额清洗
+            # 余额清洗与安全转换
             if ending_balance is not None:
                 if isinstance(ending_balance, str):
                     ending_balance = re.sub(r'[£$¥€,\s]', '', ending_balance)
@@ -555,6 +553,10 @@ if uploaded_file:
                         ending_balance = float(ending_balance)
                     except:
                         ending_balance = None
+                elif not isinstance(ending_balance, (int, float)):
+                    ending_balance = None
+            # 如果最终还是 None，则设为 0 供显示
+            display_balance = ending_balance if isinstance(ending_balance, (int, float)) else 0
 
             # 置信度处理
             if confidence is None:
@@ -622,7 +624,12 @@ if uploaded_file:
             c1, c2, c3, c4 = st.columns(4)
             with c1: st.metric("🏦 银行名称", extracted.get("bank_name", "未识别"))
             with c2: st.metric("💳 账号", extracted.get("account_number", "未识别"))
-            with c3: st.metric("💰 期末余额", f"¥ {extracted.get('ending_balance', 0):,.2f}")
+            with c3: 
+                bal = extracted.get("ending_balance")
+                if isinstance(bal, (int, float)):
+                    st.metric("💰 期末余额", f"¥ {bal:,.2f}")
+                else:
+                    st.metric("💰 期末余额", "未识别")
             with c4: st.metric("📈 置信度", f"{extracted.get('confidence', 0)*100:.0f}%")
 
             if extracted.get("risk_notes"):
