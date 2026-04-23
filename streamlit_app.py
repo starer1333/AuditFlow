@@ -501,7 +501,7 @@ with col2:
     st.caption("支持 PDF、PNG、JPG 格式，单次上传一份文件")
 
 # -------------------- API 配置 --------------------
-SILICONFLOW_API_KEY = st.secrets.get("SILICONFLOW_API_KEY", "sk-owvtekhwtwulnbuomcvsrrzglwprcyfylehowryuufxfxuau")
+SILICONFLOW_API_KEY = st.secrets.get("SILICONFLOW_API_KEY", "")
 SILICONFLOW_MODEL = "Qwen/Qwen2-VL-72B-Instruct"
 
 # -------------------- 审计意见参考库 --------------------
@@ -567,7 +567,7 @@ if uploaded_file:
 
                     # ========== 请替换为您的实际配置 ==========
                     DEEPSEEK_OCR_URL = "https://api.siliconflow.cn/v1/chat/completions"  # 或您的自定义端点
-                    DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY","sk-owvtekhwtwulnbuomcvsrrzglwprcyfylehowryuufxfxuau" )
+                    DEEPSEEK_API_KEY = st.secrets.get("DEEPSEEK_API_KEY","" )
                     DEEPSEEK_MODEL = "deepseek-ai/DeepSeek-OCR"
                     # =========================================
 
