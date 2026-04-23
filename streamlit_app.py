@@ -290,7 +290,7 @@ st.markdown("""
 st.markdown("""<div class="main-header"><h1>🌊 AuditFlow</h1><p>审计数据中枢 — 从“数据孤岛”到“统一大脑”的范式创新</p></div>""", unsafe_allow_html=True)
 
 # -------------------- 开篇故事 --------------------
-with st.expander("📖 我们的故事：从加班的审计师说起", expanded=True):
+with st.expander("📖 我们的故事：从凌晨三点的审计师说起", expanded=True):
     st.markdown("""<div class="story-box"><p class="quote-text">“凌晨三点，我揉了揉发酸的眼睛。面前是几百页带水印的银行对账单、开户清单、信用报告。公司的智谱大模型识别完，我还是不敢直接用——水印遮挡的金额、印章盖住的账号、跨页表格错位的行，每一个都要肉眼再核对一遍。原本以为AI能省时间，结果每次还是要加班几个小时。”</p>
 <p style="text-align: right; margin-top: 1rem; color: #FFD700; font-weight: 600;">—— 一位四大审计师</p></div>""", unsafe_allow_html=True)
 
@@ -326,8 +326,6 @@ with col2:
     st.markdown("### 🧠 理论支撑")
     st.markdown("""<div class="theory-box"><p class="theory-label">德勤研究指出：</p><p class="theory-quote">“AI将重构审计作业流程，从<span class="theory-highlight">经验驱动</span>转向<span class="theory-highlight">智能驱动</span>。”</p><p class="theory-label" style="margin-top:1rem;">Jeffrey导师强调：</p><p class="theory-quote">“审计数字化大脑需具备<span class="theory-highlight">感知、认知、决策、协同</span>四大能力，实现从<span class="theory-highlight">单点工具</span>到<span class="theory-highlight">统一智能层</span>的跃迁。”</p><p style="margin-top:1rem; color: #68d391;">✅ AuditFlow正是这一理念的完美实践。</p></div>""", unsafe_allow_html=True)
 
-with st.expander("🚀 未来展望：从单文件识别到跨文档智能审计", expanded=True):
-    st.markdown("""<div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 20px; padding: 1.5rem; border: 1px solid #334155;"><p style="color: #cbd5e1;">当前版本已实现<span style="color: #2dd4bf;">单份源文件的智能识别与底稿生成</span>。下一阶段将迈向批量上传、交叉比对、差异定位与可视化对证，成为审计师的<span style="color: #2dd4bf;">“全局风险雷达”</span>。</p></div>""", unsafe_allow_html=True)
 st.divider()
 
 # -------------------- 文件上传区 --------------------
@@ -345,8 +343,28 @@ SILICONFLOW_MODEL = "Qwen/Qwen2-VL-72B-Instruct"
 
 # -------------------- 审计意见参考库 --------------------
 with st.expander("📝 审计意见参考库（可编辑）", expanded=True):
-    default_reference = """基于已执行的审计程序，我们认为，上述银行余额调节表在所有重大方面公允反映了XX公司截至XX年XX月XX日的银行存款余额。对于大额未达账项，已建议企业检查期后银行对账单并进行调整。未发现其他异常交易或重大错报风险。"""
-    audit_opinion_reference = st.text_area("参考范例", value=default_reference, height=150)
+    default_reference = """其他确认与计量问题
+（一）未恰当核算定制化产品相关研发支出
+根据企业会计准则及相关规定，企业为履行合同发生的成本，不属于其他企业会计准则规范范围且同时满足相关条件的，应当作为合同履约成本确认为一项资产，采用与该资产相关的商品的收入确认基础进行摊销，计入当期损益。
+
+（二）未正确处理固定资产修复支出
+根据企业会计准则及相关规定，固定资产的后续支出是指固定资产在使用过程中发生的更新改造支出、修理费用等支出。对于固定资产的后续支出，符合固定资产确认条件的，应当计入固定资产成本，同时扣除被替换部分的账面价值；不符合固定资产确认条件的，应当在发生时计入当期损益。
+
+（三）未恰当确认和计量在建工程
+根据企业会计准则及相关规定，企业以出包方式建造固定资产，其成本由建造该项固定资产达到预定可使用状态前所发生的必要支出构成，包括发生的建筑工程支出、安装工程支出以及需分摊计入固定资产价值的待摊支出。
+
+（四）未正确处理解除租赁所支付的违约金
+根据企业会计准则及相关规定，租赁变更导致租赁范围缩小或租赁期缩短的，承租人应当相应调减使用权资产的账面价值，并将相关利得或损失计入资产处置损益。
+
+（五）未恰当处理转让子公司股权形成的预计负债
+若一项义务同时满足是企业承担的现时义务、履行该义务很可能导致经济利益流出企业、该义务的金额能够可靠地计量，则应当确认为预计负债。
+
+（六）未恰当核算股份支付相关递延所得税
+对于附有业绩条件或服务条件的股权激励计划，企业按照会计准则确认的成本费用在等待期不得税前抵扣，待股权激励计划行权时方可抵扣。
+
+（七）未正确区分会计估计变更与前期差错更正
+会计估计变更是指由于资产和负债的当前状况及预期经济利益和义务发生了变化而对资产或负债账面价值进行的调整；前期差错是指由于没有运用或错误运用可靠信息而对前期财务报表造成的省略或错报。"""
+    audit_opinion_reference = st.text_area("参考范例", value=default_reference, height=200)
 
 if uploaded_file:
     st.success(f"✅ 已上传：{uploaded_file.name}")
@@ -409,8 +427,7 @@ if uploaded_file:
             text_analysis = llm_response[:llm_response.find('{')] if '{' in llm_response else llm_response
             validation = validate_file_type_and_content(parsed_ocr_text, file_type)
             if validation["error"]:
-                st.error(validation["error"])
-                st.stop()
+                st.warning(validation["error"])  # 改为警告，不停止流程
             if validation["warning"]:
                 st.warning(validation["warning"])
 
@@ -433,10 +450,31 @@ if uploaded_file:
             st.markdown("### 📥 下载审计底稿")
             excel_bytes = generate_excel_by_type(extracted, file_type)
             st.download_button(label="📊 下载 Excel 底稿", data=excel_bytes, file_name=f"审计底稿_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            st.download_button(label="📄 下载完整报告 (JSON)", data=json.dumps({"analysis": text_analysis, "extracted": extracted}, ensure_ascii=False, indent=2), file_name=f"AuditFlow_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json", mime="application/json", use_container_width=True)
 
-# -------------------- 数据安全 --------------------
+# -------------------- 未来展望 --------------------
+with st.expander("🚀 未来展望：从单文件识别到跨文档智能审计", expanded=True):
+    st.markdown("""<div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 20px; padding: 1.5rem; border: 1px solid #334155;"><p style="color: #cbd5e1;">当前版本已实现<span style="color: #2dd4bf;">单份源文件的智能识别与底稿生成</span>。下一阶段将迈向批量上传、交叉比对、差异定位与可视化对证，成为审计师的<span style="color: #2dd4bf;">“全局风险雷达”</span>。</p></div>""", unsafe_allow_html=True)
+
+# -------------------- 数据安全与隐私保护 --------------------
 with st.expander("🔒 数据安全与隐私保护", expanded=True):
-    st.markdown("""<div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 20px; padding: 1.5rem; border: 1px solid #334155;"><p style="color: #cbd5e1;">AuditFlow 将数据安全置于首位，支持私有化部署与内网隔离，遵循《个人信息保护法》及审计底稿保密要求。</p></div>""", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 20px; padding: 1.5rem; border: 1px solid #334155;">
+        <p style="color: #cbd5e1; font-size: 1rem; line-height: 1.6;">
+            AuditFlow 将数据安全置于首位，为企业提供<span style="color: #2dd4bf;">私有化部署</span>与<span style="color: #2dd4bf;">内网隔离</span>方案：
+        </p>
+        <ul style="color: #94a3b8; margin-top: 1rem; line-height: 1.8;">
+            <li><span style="color: #fbbf24;">🏢 内网部署</span> — 系统可完全部署在企业内部服务器或办公电脑，无需连接外网，杜绝数据外泄风险。</li>
+            <li><span style="color: #fbbf24;">🔑 私有化大模型</span> — 支持接入企业自有的本地大模型（如 Ollama、私有化 API），所有数据处理均在内部完成。</li>
+            <li><span style="color: #fbbf24;">📜 合规保障</span> — 严格遵循《个人信息保护法》《数据安全法》及审计底稿保密要求，不存储任何源文件与提取结果。</li>
+            <li><span style="color: #fbbf24;">🛡️ 零数据残留</span> — 所有上传文件在处理完成后即时删除，不留痕迹。</li>
+        </ul>
+        <p style="color: #cbd5e1; margin-top: 1rem;">
+            无论是四大会计师事务所还是企业内审部门，均可放心将 AuditFlow 嵌入现有审计流程。
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
+# -------------------- 页脚 --------------------
 st.divider()
 st.markdown("""<div class="footer"><p style="font-size: 1.2rem; font-weight: 600;">🌊 AuditFlow — 让审计数据自动流动，让审计师回归专业判断</p><p>德勤数字化精英挑战赛 Team J | 从“单点工具”到“统一大脑”的范式创新</p></div>""", unsafe_allow_html=True)
