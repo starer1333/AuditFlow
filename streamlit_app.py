@@ -401,7 +401,15 @@ if uploaded_file:
             parsed_ocr_text = parse_deepseek_ocr_response(ocr_text)
             st.markdown("### 🔍 识别的原始文本")
             st.text_area("提取的文本", parsed_ocr_text, height=200)
-
+            # ========== API 调用状态提示 ==========
+            if ocr_api_success and llm_api_success:
+                st.success("✅ 当前使用：真实 DeepSeek-OCR + 真实大模型分析")
+            elif ocr_api_success and not llm_api_success:
+                st.warning("⚠️ DeepSeek-OCR 真实调用成功，大模型使用模拟数据")
+            elif not ocr_api_success and llm_api_success:
+                st.warning("⚠️ OCR 使用模拟数据，大模型真实调用成功")
+            else:
+                st.info("📌 当前为模拟演示模式，展示完整流程")
         with st.spinner("🤖 正在调用大模型分析..."):
             prompt = f"""你是一名资深注册会计师。请根据以下OCR文本完成专业判断。\n**文件类型**：{file_type}\n**OCR内容**：\n{parsed_ocr_text[:3000]}\n\n1. 内容识别与分类\n2. 关键数据提取（JSON格式）\n3. 数据质量评估（置信度0.0-1.0）\n4. 审计意见草稿\n5. 风险提示\n\n参考范例：{audit_opinion_reference}\n\n最后输出JSON包含risk_notes字段。"""
             headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
