@@ -13,6 +13,8 @@ import re
 import os
 import tempfile
 import csv
+import importlib
+import importlib.util
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
@@ -51,6 +53,8 @@ def load_bin_database():
     return bin_dict
 
 BIN_DATABASE = load_bin_database()
+SILICONFLOW_API_URL = "https://api.siliconflow.cn/v1/chat/completions"
+SILICONFLOW_MODEL = "Qwen/Qwen2-VL-72B-Instruct"
 
 def luhn_check(card_num: str) -> bool:
     """Luhn算法校验银行卡号有效性"""
@@ -148,6 +152,50 @@ def parse_deepseek_ocr_response(raw_response: str) -> str:
     result = re.sub(r'<[^>]+>', '', result)
     result = re.sub(r'\n\s*\n', '\n', result)
     return result.strip() or raw_response[:500]
+
+def call_siliconflow_chat(api_key: str, model: str, messages: list, temperature=0.1, max_tokens=2048, timeout=60):
+    """统一调用 SiliconFlow 聊天接口，返回 (success, content)。"""
+    if not api_key:
+        return False, ""
+    headers = {"Authorization": f"Bearer {api_key}"}
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens
+    }
+    try:
+        resp = requests.post(SILICONFLOW_API_URL, headers=headers, json=payload, timeout=timeout)
+        if resp.status_code == 200:
+            content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+            return bool(content), content or ""
+    except requests.RequestException:
+        pass
+    return False, ""
+
+def get_local_ocr_text(temp_input_path: str) -> str:
+    """
+    尝试使用本地 PaddleOCR（如环境已安装）进行识别。
+    说明：不对 import 使用 try/except；通过 find_spec 判断模块可用性。
+    """
+    if not temp_input_path:
+        return ""
+    if importlib.util.find_spec("paddleocr") is None:
+        return ""
+    paddleocr_module = importlib.import_module("paddleocr")
+    PaddleOCR = getattr(paddleocr_module, "PaddleOCR", None)
+    if PaddleOCR is None:
+        return ""
+    ocr = PaddleOCR(use_angle_cls=True, lang="ch")
+    result = ocr.ocr(temp_input_path, cls=True)
+    lines = []
+    for block in result or []:
+        for item in block or []:
+            if len(item) >= 2 and item[1]:
+                text = item[1][0]
+                if text:
+                    lines.append(str(text))
+    return "\n".join(lines).strip()
 
 def validate_file_type_and_content(llm_response, selected_type):
     """校验文件类型与财务相关性"""
@@ -442,7 +490,6 @@ with col2:
 
 # -------------------- API 配置 --------------------
 SILICONFLOW_API_KEY = st.secrets.get("SILICONFLOW_API_KEY", "")
-SILICONFLOW_MODEL = "Qwen/Qwen2-VL-72B-Instruct"
 
 # -------------------- 审计意见参考库 --------------------
 with st.expander("📝 审计意见参考库（可编辑）", expanded=True):
@@ -475,53 +522,54 @@ if uploaded_file:
         st.image(uploaded_file, width=400)
 
     if st.button("🚀 开始智能处理", type="primary", use_container_width=True):
-        with st.spinner("⏳ 正在提取文本..."):
-            suffix = os.path.splitext(uploaded_file.name)[1]
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(uploaded_file.getvalue())
-                temp_input_path = tmp.name
+        ocr_api_success = False
+        ocr_local_success = False
+        temp_input_path = ""
+        try:
+            with st.spinner("⏳ 正在提取文本..."):
+                suffix = os.path.splitext(uploaded_file.name)[1]
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp.write(uploaded_file.getvalue())
+                    temp_input_path = tmp.name
 
-            ocr_text = ""
-            ocr_api_success = False
-            try:
+                ocr_text = ""
                 img_bytes = uploaded_file.getvalue()
                 img_b64 = base64.b64encode(img_bytes).decode()
-                headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
-                payload = {
-                    "model": "deepseek-ai/DeepSeek-OCR",
-                    "messages": [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}, {"type": "text", "text": "<image>\n<|grounding|>Convert the document to markdown."}]}],
-                    "temperature": 0.1, "max_tokens": 2048
-                }
-                resp = requests.post("https://api.siliconflow.cn/v1/chat/completions", headers=headers, json=payload, timeout=60)
-                if resp.status_code == 200:
-                    ocr_text = resp.json()["choices"][0]["message"]["content"]
-                    ocr_api_success = True
-            except:
-                ocr_text = ""
+                ocr_messages = [{
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
+                        {"type": "text", "text": "<image>\n<|grounding|>Convert the document to markdown."}
+                    ]
+                }]
+                ocr_api_success, ocr_text = call_siliconflow_chat(
+                    api_key=SILICONFLOW_API_KEY,
+                    model="deepseek-ai/DeepSeek-OCR",
+                    messages=ocr_messages
+                )
 
-            if not ocr_text:
-                ocr_text = """中国工商银行北京朝阳支行\n账号：6222020200123456789\n币种：RMB\n对账单期间：2025-12-01 至 2025-12-31\n期末余额：1,250,000.00"""
-                st.info("📌 云端OCR暂不可用，当前为模拟演示模式。")
+                if not ocr_text:
+                    ocr_text = get_local_ocr_text(temp_input_path)
+                    ocr_local_success = bool(ocr_text)
 
-            parsed_ocr_text = parse_deepseek_ocr_response(ocr_text)
-            st.markdown("### 🔍 识别的原始文本")
-            st.text_area("提取的文本", parsed_ocr_text, height=200)
+                if not ocr_text:
+                    ocr_text = """中国工商银行北京朝阳支行\n账号：6222020200123456789\n币种：RMB\n对账单期间：2025-12-01 至 2025-12-31\n期末余额：1,250,000.00"""
+                    st.info("📌 云端OCR与本地OCR暂不可用，当前为模拟演示模式。")
 
-        with st.spinner("🤖 正在调用大模型分析..."):
-            prompt = f"""你是一名资深注册会计师。请根据以下OCR文本完成专业判断。\n**文件类型**：{file_type}\n**OCR内容**：\n{parsed_ocr_text[:3000]}\n\n1. 内容识别与分类\n2. 关键数据提取（JSON格式）\n3. 数据质量评估（置信度0.0-1.0）\n4. 审计意见草稿\n5. 风险提示\n\n参考范例：{audit_opinion_reference}\n\n最后输出JSON包含risk_notes字段。"""
-            headers = {"Authorization": f"Bearer {SILICONFLOW_API_KEY}"}
-            payload = {"model": SILICONFLOW_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 2048}
-            llm_api_success = False
-            try:
-                resp = requests.post("https://api.siliconflow.cn/v1/chat/completions", headers=headers, json=payload, timeout=60)
-                if resp.status_code == 200:
-                    llm_response = resp.json()["choices"][0]["message"]["content"]
-                    llm_api_success = True
-                else:
-                    raise Exception()
-            except:
-                llm_response = f"""1. 内容识别与分类：该文件为银行对账单，与所选类型一致。\n3. 数据质量评估：综合置信度0.95。\n4. 审计意见草稿：基于已执行的审计程序，我们认为，上述银行余额调节表在所有重大方面公允反映了银行存款余额。未发现重大异常。\n5. 风险提示：建议对期末大额余额执行函证程序。\n{{"bank_name": "中国工商银行北京朝阳支行", "account_number": "6222020200123456789", "ending_balance": 1250000.00, "statement_period": "2025-12-01至2025-12-31", "currency": "RMB", "confidence": 0.95, "risk_notes": "基于已执行的程序，未发现重大异常，银行存款余额可确认。"}}"""
-                st.info("📌 大模型API暂不可用，当前为模拟演示模式。")
+                parsed_ocr_text = parse_deepseek_ocr_response(ocr_text)
+                st.markdown("### 🔍 识别的原始文本")
+                st.text_area("提取的文本", parsed_ocr_text, height=200)
+
+            with st.spinner("🤖 正在调用大模型分析..."):
+                prompt = f"""你是一名资深注册会计师。请根据以下OCR文本完成专业判断。\n**文件类型**：{file_type}\n**OCR内容**：\n{parsed_ocr_text[:3000]}\n\n1. 内容识别与分类\n2. 关键数据提取（JSON格式）\n3. 数据质量评估（置信度0.0-1.0）\n4. 审计意见草稿\n5. 风险提示\n\n参考范例：{audit_opinion_reference}\n\n最后输出JSON包含risk_notes字段。"""
+                llm_api_success, llm_response = call_siliconflow_chat(
+                    api_key=SILICONFLOW_API_KEY,
+                    model=SILICONFLOW_MODEL,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                if not llm_response:
+                    llm_response = f"""1. 内容识别与分类：该文件为银行对账单，与所选类型一致。\n3. 数据质量评估：综合置信度0.95。\n4. 审计意见草稿：基于已执行的审计程序，我们认为，上述银行余额调节表在所有重大方面公允反映了银行存款余额。未发现重大异常。\n5. 风险提示：建议对期末大额余额执行函证程序。\n{{"bank_name": "中国工商银行北京朝阳支行", "account_number": "6222020200123456789", "ending_balance": 1250000.00, "statement_period": "2025-12-01至2025-12-31", "currency": "RMB", "confidence": 0.95, "risk_notes": "基于已执行的程序，未发现重大异常，银行存款余额可确认。"}}"""
+                    st.info("📌 大模型API暂不可用，当前为模拟演示模式。")
 
             json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
             extracted = {}
@@ -555,9 +603,6 @@ if uploaded_file:
                         ending_balance = None
                 elif not isinstance(ending_balance, (int, float)):
                     ending_balance = None
-            # 如果最终还是 None，则设为 0 供显示
-            display_balance = ending_balance if isinstance(ending_balance, (int, float)) else 0
-
             # 置信度处理
             if confidence is None:
                 confidence = 0.5
@@ -608,8 +653,12 @@ if uploaded_file:
             # ========== API 调用状态提示 ==========
             if ocr_api_success and llm_api_success:
                 st.success("✅ 当前使用：真实 DeepSeek-OCR + 真实大模型分析")
+            elif ocr_local_success and llm_api_success:
+                st.success("✅ 当前使用：本地 PaddleOCR + 真实大模型分析")
             elif ocr_api_success and not llm_api_success:
                 st.warning("⚠️ DeepSeek-OCR 真实调用成功，大模型使用模拟数据")
+            elif ocr_local_success and not llm_api_success:
+                st.warning("⚠️ 本地 PaddleOCR 调用成功，大模型使用模拟数据")
             elif not ocr_api_success and llm_api_success:
                 st.warning("⚠️ OCR 使用模拟数据，大模型真实调用成功")
             else:
@@ -640,6 +689,12 @@ if uploaded_file:
             excel_bytes = generate_excel_by_type(extracted, file_type)
             st.download_button(label="📊 下载 Excel 底稿", data=excel_bytes, file_name=f"审计底稿_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
             st.download_button(label="📄 下载完整报告 (JSON)", data=json.dumps({"analysis": text_analysis, "extracted": extracted}, ensure_ascii=False, indent=2), file_name=f"AuditFlow_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json", mime="application/json", use_container_width=True)
+        finally:
+            if temp_input_path and os.path.exists(temp_input_path):
+                try:
+                    os.remove(temp_input_path)
+                except OSError:
+                    pass
 
 # -------------------- 未来展望 --------------------
 with st.expander("🚀 未来展望：从单文件识别到跨文档智能审计", expanded=True):
